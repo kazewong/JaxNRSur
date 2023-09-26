@@ -58,7 +58,9 @@ class CubicSpline:
 
     @staticmethod
     @jax.jit
-    def build_rep(x: Float[Array, str("n")], y: Float[Array, str("n")]) -> Float[Array, str("n")]:
+    def build_rep(
+        x: Float[Array, str("n")], y: Float[Array, str("n")]
+    ) -> Float[Array, str("n")]:
         # TODO: Revise boundary condition
 
         """
