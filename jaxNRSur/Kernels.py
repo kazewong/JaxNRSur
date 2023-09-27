@@ -1,44 +1,56 @@
 from abc import abstractmethod
 import jax.numpy as jnp
+import equinox as eqx
+from jaxtyping import Array, Float
 
 
-class Kernel:
+class Kernel(eqx.Module):
     def __init__(self):
         pass
 
     @abstractmethod
-    def __call__(self, X, Y):
+    def __call__(
+        self, X: Float[Array, str("n_sample")], Y: Float[Array, str("n_sample")]
+    ) -> Float[Array, str("n_sample")]:
         """
         We currently support case when both arguments are supplied
         """
 
-    def make_kernel(self):
-        def kernel(X, Y):
-            return self.__call__(X, Y)
-
-        return kernel
-
 
 class SumKernel(Kernel):
-    def __init__(self, k1, k2):
+    k1: Kernel
+    k2: Kernel
+
+    def __init__(self, k1: Kernel, k2: Kernel):
         self.k1 = k1
         self.k2 = k2
 
-    def __call__(self, X, Y):
+    def __call__(
+        self, X: Float[Array, str("n_sample")], Y: Float[Array, str("n_sample")]
+    ) -> Float[Array, str("n_sample")]:
         return self.k1(X, Y) + self.k2(X, Y)
 
 
 class ProductKernel(Kernel):
-    def __init__(self, k1, k2):
+    k1: Kernel
+    k2: Kernel
+
+    def __init__(self, k1: Kernel, k2: Kernel):
         self.k1 = k1
         self.k2 = k2
 
-    def __call__(self, X, Y):
+    def __call__(
+        self, X: Float[Array, str("n_sample")], Y: Float[Array, str("n_sample")]
+    ) -> Float[Array, str("n_sample")]:
         return self.k1(X, Y) * self.k2(X, Y)
 
 
 class ConstantKernel(Kernel):
-    def __init__(self, constant_value=1.0, x_dims=1, y_dims=1):
+    constant_value: float
+    x_dims: int
+    y_dims: int
+
+    def __init__(self, constant_value: float = 1.0, x_dims: int = 1, y_dims: int = 1):
         self.constant_value = constant_value
         self.x_dims = x_dims
         self.y_dims = y_dims
@@ -60,11 +72,17 @@ class ConstantKernel(Kernel):
             self.y_dims = params["y_dims"]
             print("update y_dims")
 
-    def __call__(self, X, Y):
+    def __call__(
+        self, X: Float[Array, str("n_sample")], Y: Float[Array, str("n_sample")]
+    ) -> Float[Array, str("n_sample")]:
         return jnp.full((self.x_dims, self.y_dims), self.constant_value)
 
 
 class WhiteKernel(Kernel):
+    noise_level: float
+    x_dims: int
+    y_dims: int
+
     def __init__(self, noise_level=1.0, x_dims: int = 1, y_dims: int = 1):
         self.noise_level = noise_level
         self.x_dims = x_dims
@@ -87,11 +105,15 @@ class WhiteKernel(Kernel):
             self.y_dims = params["y_dims"]
             print("update y_dims")
 
-    def __call__(self, X, Y):
+    def __call__(
+        self, X: Float[Array, str("n_sample")], Y: Float[Array, str("n_sample")]
+    ) -> Float[Array, str("n_sample")]:
         return jnp.zeros((self.x_dims, self.y_dims))
 
 
-def cdist(X, Y):
+def cdist(
+    X: Float[Array, str("n_sample")], Y: Float[Array, str("n_sample")]
+) -> Float[Array, str("n_sample")]:
     """
     Compute square distance between two metric
     """
@@ -99,11 +121,13 @@ def cdist(X, Y):
 
 
 class RBF(Kernel):
+    length_scale: float
+
     """
     Anisotropic RBF kernel
     """
 
-    def __init__(self, length_scale=1.0):
+    def __init__(self, length_scale: float = 1.0):
         self.length_scale = length_scale
 
     def load_params(self, params: dict):
@@ -117,6 +141,8 @@ class RBF(Kernel):
             self.length_scale = params["length_scale"]
             print("update length_scale")
 
-    def __call__(self, X, Y):
+    def __call__(
+        self, X: Float[Array, str("n_sample")], Y: Float[Array, str("n_sample")]
+    ) -> Float[Array, str("n_sample")]:
         dists = cdist((X / self.length_scale), (Y / self.length_scale))
         return jnp.exp(-0.5 * dists)
