@@ -1,7 +1,7 @@
 import h5py
-import jax
 import jax.numpy as jnp
 from jaxNRSur.EIMPredictor import EIMpredictor
+from jaxNRSur.spline import CubicSpline
 from jaxtyping import Array, Float
 from read_node_info import read_node_fit_info_from_h5
 
@@ -61,43 +61,28 @@ class SurrogateModel:
             predictors.append(node_predictor)
         return predictors
 
-    def make_eim_kernel(self, jit=False):
-        amp_kernel = []
-        phase_kernel = []
-        for i in range(len(self.amp_gpr_predictors)):
-            amp_kernel.append(self.amp_gpr_predictors[i].make_predict(jit))
-        for i in range(len(self.phase_gpr_predictors)):
-            phase_kernel.append(self.phase_gpr_predictors[i].make_predict(jit))
+    def get_eim(
+        self, params: Float[Array, str("n_dim")]
+    ) -> tuple[Float[Array, str("n_sample")], Float[Array, str("n_sample")]]:
+        amp_result = jnp.zeros(self.n_amp_nodes)
+        phase_result = jnp.zeros(self.n_phase_nodes)
+        for i in range(self.n_amp_nodes):
+            amp_result = amp_result.at[i].set(self.amp_gpr_predictors[i](params)[0])
+        for i in range(self.n_phase_nodes):
+            phase_result = phase_result.at[i].set(
+                self.phase_gpr_predictors[i](params)[0]
+            )
+        return amp_result, phase_result
 
-        def eim_kernel(params):
-            amp_result = jnp.zeros(self.n_amp_nodes)
-            phase_result = jnp.zeros(self.n_phase_nodes)
-            for i in range(self.n_amp_nodes):
-                amp_result = amp_result.at[i].set(amp_kernel[i](params)[0])
-            for i in range(self.n_phase_nodes):
-                phase_result = phase_result.at[i].set(phase_kernel[i](params)[0])
-            return amp_result, phase_result
-
-        if jit is True:
-            return jax.jit(eim_kernel)
-
-        return eim_kernel
-
-    def make_waveform_kernel(self, jit=False):
-        eim_kernel = self.make_eim_kernel(jit)
-
-        def waveform_kernel(t, params):
-            chi_hat, chi_a = effective_spin(params[0], params[1], params[2])
-            trans_params = jnp.array([[jnp.log(params[0]), chi_hat, chi_a]])
-            amp_result, phase_result = eim_kernel(trans_params)
-            amp = jnp.dot(self.amp_B_matrix.T, amp_result)
-            phase = -jnp.dot(self.phase_B_matrix.T, phase_result)
-            phase = phase + get_T3_phase(params[0], self.sur_time)
-            interp_amp = jnp.interp(t, self.sur_time, amp)
-            interp_phase = jnp.interp(t, self.sur_time, phase)
-            return interp_amp * jnp.exp(1j * interp_phase)
-
-        if jit is True:
-            return jax.jit(waveform_kernel)
-
-        return waveform_kernel
+    def get_waveform(
+        self, time: Float[Array, str("n_sample")], params: dict
+    ) -> Float[Array, str("n_sample")]:
+        chi_hat, chi_a = effective_spin(params[0], params[1], params[2])
+        trans_params = jnp.array([[jnp.log(params[0]), chi_hat, chi_a]])
+        amp_result, phase_result = self.get_eim(trans_params)
+        amp = jnp.dot(self.amp_B_matrix.T, amp_result)
+        phase = -jnp.dot(self.phase_B_matrix.T, phase_result)
+        phase = phase + get_T3_phase(params[0], self.sur_time)
+        interp_amp = CubicSpline(self.sur_time, amp)(time)
+        interp_phase = CubicSpline(self.sur_time, phase)(time)
+        return interp_amp * jnp.exp(1j * interp_phase)
