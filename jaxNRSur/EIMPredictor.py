@@ -1,8 +1,5 @@
-import jax
 import jax.numpy as jnp
-import h5py
 from jaxtyping import Array, Float
-from typing import Callable
 from jaxNRSur import Kernels
 import equinox as eqx
 
@@ -35,18 +32,24 @@ class EIMpredictor:
         error = data_normed_err * self.data_std if data_normed_err is not None else None
         return mean, error
 
-    def predict(self, X: Float[Array, str("n_samples")]):
+    def predict(
+        self, X: Float[Array, str("n_samples")]
+    ) -> Float[Array, str("n_samples")]:
         y_normed_pred = self.GPR_obj.predict_mean(X)
-        y_pred = self.undo_normalization(y_normed_pred)
+        y_pred = self.undo_normalization(y_normed_pred)[0]
         y_pred = (
             y_pred + self.linearModel(X) if self.linearModel is not None else y_pred
         )
         return y_pred
 
+    def __call__(
+        self, X: Float[Array, str("n_samples")]
+    ) -> Float[Array, str("n_samples")]:
+        return self.predict(X)
+
 
 class GaussianProcessRegressor(eqx.Module):
-
-    kernel_params: dict
+    kernel: Kernels.Kernel
     x_train: Float[Array, str("n_samples")]
     y_train_mean: float
     y_train_std: float
@@ -54,7 +57,7 @@ class GaussianProcessRegressor(eqx.Module):
     L: Float[Array, str("n_samples")]
 
     def __init__(self, parameters: dict):
-        self.kernel_params = parameters["kernel_"]
+        kernel_params = parameters["kernel_"]
         self.x_train = parameters["X_train_"]
         self.y_train_mean = parameters["_y_train_mean"]
         self.y_train_std = parameters["_y_train_std"]
@@ -63,7 +66,7 @@ class GaussianProcessRegressor(eqx.Module):
             "L_"
         ]  # I think L is only needed when you want to predict the variance as well.
 
-        self.kernel = self.compose_kernel(self.kernel_params)
+        self.kernel = self.compose_kernel(kernel_params)
 
     def predict_mean(self, params: Float[Array, str("n_features")]):
         K_trans = self.kernel(params, self.x_train)
@@ -71,26 +74,23 @@ class GaussianProcessRegressor(eqx.Module):
         y_mean = self.y_train_std * y_mean + self.y_train_mean
         return y_mean
 
-    @staticmethod
-    def compose_kernel(params):
+    def compose_kernel(self, params: dict) -> Kernels.Kernel:
         if params["name"] == "Sum":
             return Kernels.SumKernel(
-                __class__.compose_kernel(params["k1"]),
-                __class__.compose_kernel(params["k2"]),
+                self.compose_kernel(params["k1"]),
+                self.compose_kernel(params["k2"]),
             )
         elif params["name"] == "Product":
             return Kernels.ProductKernel(
-                __class__.compose_kernel(params["k1"]),
-                __class__.compose_kernel(params["k2"]),
+                self.compose_kernel(params["k1"]),
+                self.compose_kernel(params["k2"]),
             )
         elif params["name"] == "ConstantKernel":
             return Kernels.ConstantKernel(
-                params["constant_value"], 1, __class__.x_train.shape[0]
+                params["constant_value"], 1, self.x_train.shape[0]
             )
         elif params["name"] == "WhiteKernel":
-            return Kernels.WhiteKernel(
-                params["noise_level"], 1, __class__.x_train.shape[0]
-            )
+            return Kernels.WhiteKernel(params["noise_level"], 1, self.x_train.shape[0])
         elif params["name"] == "RBF":
             return Kernels.RBF(params["length_scale"])
         else:
