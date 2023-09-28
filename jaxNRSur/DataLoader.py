@@ -6,7 +6,7 @@ h5_mode_tuple: dict[tuple[int, int], str] = {
     (2, 0): "ITEM_6",  # No Imaginary part
     (2, 1): "ITEM_5",
     (2, 2): "ITEM_8",
-    (3, 0): "ITEM_3",  # No Imaginary part
+    (3, 0): "ITEM_3",  # No Real part
     (3, 1): "ITEM_4",
     (3, 2): "ITEM_0",
     (3, 3): "ITEM_2",
@@ -96,7 +96,13 @@ class SurrogateDataLoader:
             result["phase"] = self.read_function(data["ITEM_0"])  # type: ignore
             result["amp"] = self.read_function(data["ITEM_1"])  # type: ignore
         else:
-            result["real"] = self.read_function(data["ITEM_0"])  # type: ignore
             if mode[1] != 0:
+                result["real"] = self.read_function(data["ITEM_0"])  # type: ignore
                 result["imag"] = self.read_function(data["ITEM_1"])  # type: ignore
+            else:
+                local_function = self.read_function(data["ITEM_0"])  # type: ignore
+                if local_function["name"] == "re":
+                    result["real"] = local_function
+                else:
+                    result["imag"] = local_function
         return result
