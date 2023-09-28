@@ -1,9 +1,23 @@
 import h5py
 import jax.numpy as jnp
 from jaxNRSur.EIMPredictor import EIMpredictor
-from jaxNRSur.spline import CubicSpline
+from jaxNRSur.Spline import CubicSpline
 from jaxtyping import Array, Float
 from read_node_info import read_node_fit_info_from_h5
+
+h5_mode_tuple = {
+    "(3,2)": "ITEM_0",
+    "(3,1)": "ITEM_4",
+    "(5,5)": "ITEM_10",
+    "(3,3)": "ITEM_2",
+    "(3,0)": "ITEM_3",
+    "(4,4)": "ITEM_1",
+    "(2,1)": "ITEM_5",
+    "(2,0)": "ITEM_6",
+    "(4,3)": "ITEM_7",
+    "(2,2)": "ITEM_8",
+    "(4,2)": "ITEM_9",
+}
 
 
 def get_T3_phase(q: float, t: Float[Array, str("n")], t_ref: float = 1000.0) -> float:
