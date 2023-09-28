@@ -6,7 +6,7 @@ import equinox as eqx
 
 class EIMpredictor:
     def __init__(self, data: dict, **kwargs):
-        GPR_param = data["GPR_params"]
+        GPR_param = data["DICT_GPR_params"]
         self.data_mean = data["data_mean"]
         self.data_std = data["data_std"]
 
@@ -17,7 +17,7 @@ class EIMpredictor:
         self.GPR_obj = GaussianProcessRegressor(GPR_param)
 
         # load LinearRegression fit
-        lin_reg_params = data["lin_reg_params"]
+        lin_reg_params = data["DICT_lin_reg_params"]
         if lin_reg_params is not None:
             self.linearModel = LinearRegressor(lin_reg_params)
         else:
@@ -57,7 +57,7 @@ class GaussianProcessRegressor(eqx.Module):
     L: Float[Array, str("n_samples")]
 
     def __init__(self, parameters: dict):
-        kernel_params = parameters["kernel_"]
+        kernel_params = parameters["DICT_kernel_"]
         self.x_train = parameters["X_train_"]
         self.y_train_mean = parameters["_y_train_mean"]
         self.y_train_std = parameters["_y_train_std"]
@@ -75,23 +75,23 @@ class GaussianProcessRegressor(eqx.Module):
         return y_mean
 
     def compose_kernel(self, params: dict) -> Kernels.Kernel:
-        if params["name"] == "Sum":
+        if params["name"] == b"Sum":
             return Kernels.SumKernel(
-                self.compose_kernel(params["k1"]),
-                self.compose_kernel(params["k2"]),
+                self.compose_kernel(params["DICT_k1"]),
+                self.compose_kernel(params["DICT_k2"]),
             )
-        elif params["name"] == "Product":
+        elif params["name"] == b"Product":
             return Kernels.ProductKernel(
-                self.compose_kernel(params["k1"]),
-                self.compose_kernel(params["k2"]),
+                self.compose_kernel(params["DICT_k1"]),
+                self.compose_kernel(params["DICT_k2"]),
             )
-        elif params["name"] == "ConstantKernel":
+        elif params["name"] == b"ConstantKernel":
             return Kernels.ConstantKernel(
                 params["constant_value"], 1, self.x_train.shape[0]
             )
-        elif params["name"] == "WhiteKernel":
+        elif params["name"] == b"WhiteKernel":
             return Kernels.WhiteKernel(params["noise_level"], 1, self.x_train.shape[0])
-        elif params["name"] == "RBF":
+        elif params["name"] == b"RBF":
             return Kernels.RBF(params["length_scale"])
         else:
             raise NotImplementedError("Kernel not registered")
