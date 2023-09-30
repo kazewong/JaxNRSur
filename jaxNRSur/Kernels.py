@@ -6,7 +6,7 @@ from jaxtyping import Array, Float
 
 class Kernel(eqx.Module):
     def __init__(self):
-        pass
+        super().__init__()
 
     @abstractmethod
     def __call__(
@@ -22,6 +22,7 @@ class SumKernel(Kernel):
     k2: Kernel
 
     def __init__(self, k1: Kernel, k2: Kernel):
+        super().__init__()
         self.k1 = k1
         self.k2 = k2
 
@@ -36,6 +37,7 @@ class ProductKernel(Kernel):
     k2: Kernel
 
     def __init__(self, k1: Kernel, k2: Kernel):
+        super().__init__()
         self.k1 = k1
         self.k2 = k2
 
@@ -51,6 +53,7 @@ class ConstantKernel(Kernel):
     y_dims: int
 
     def __init__(self, constant_value: float = 1.0, x_dims: int = 1, y_dims: int = 1):
+        super().__init__()
         self.constant_value = constant_value
         self.x_dims = x_dims
         self.y_dims = y_dims
@@ -84,6 +87,7 @@ class WhiteKernel(Kernel):
     y_dims: int
 
     def __init__(self, noise_level=1.0, x_dims: int = 1, y_dims: int = 1):
+        super().__init__()
         self.noise_level = noise_level
         self.x_dims = x_dims
         self.y_dims = y_dims
@@ -128,6 +132,7 @@ class RBF(Kernel):
     """
 
     def __init__(self, length_scale: float = 1.0):
+        super().__init__()
         self.length_scale = length_scale
 
     def load_params(self, params: dict):

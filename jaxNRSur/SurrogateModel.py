@@ -1,4 +1,3 @@
-import jax
 import jax.numpy as jnp
 from jaxNRSur.Spline import CubicSpline
 from jaxNRSur.DataLoader import SurrogateDataLoader
@@ -27,6 +26,7 @@ def effective_spin(q: float, chi1: float, chi2: float) -> tuple[float, float]:
 class SurrogateModel(eqx.Module):
     data: SurrogateDataLoader
     harmonics: dict[tuple[int, int], SpinWeightedSphericalHarmonics]
+    mode_22_index: int
 
     def __init__(
         self,
@@ -49,42 +49,34 @@ class SurrogateModel(eqx.Module):
         self.harmonics = {}
         for mode in modelist:
             self.harmonics[mode] = SpinWeightedSphericalHarmonics(-2, mode[0], mode[1])
+        self.mode_22_index = int(
+            jnp.where((jnp.array(modelist) == jnp.array([[2, 2]])).all(axis=1))[0][0]
+        )
 
     @staticmethod
     def get_eim(
         eim_dict: dict, params: Float[Array, str("n_dim")]
     ) -> Float[Array, str("n_sample")]:
-        result = jnp.concatenate(
-            jax.tree_util.tree_map(lambda f: f(params), eim_dict["predictors"]), axis=0
-        )
-        return jnp.dot(eim_dict["eim_basis"].T, result)
+        result = jnp.zeros((eim_dict["n_nodes"], 1))
+        for i in range(eim_dict["n_nodes"]):
+            result = result.at[i].set(eim_dict["predictors"][i](params))
+        return jnp.dot(eim_dict["eim_basis"].T, result[:, 0])
 
     def get_mode(
         self,
         time: Float[Array, str("n_samples")],
         params: Float[Array, str("n_dim")],
-        mode: tuple[int, int],
+        mode_index: int,
         orbital_phase: float = 0.0,
     ) -> Float[Array, str("n_sample")]:
-        real = jnp.zeros_like(self.data.sur_time)
-        real = jax.lax.cond(
-            "real" in self.data.modes[mode],
-            lambda x: x + self.get_eim(self.data.modes[mode]["real"], params),
-            lambda x: x,
-            real,
-        )
-        imag = jnp.zeros_like(self.data.sur_time)
-        imag = jax.lax.cond(
-            "imag" in self.data.modes[mode],
-            lambda x: x + self.get_eim(self.data.modes[mode]["imag"], params),
-            lambda x: x,
-            imag,
-        )
+        params = params[None]
+        real = self.get_eim(self.data.modes[mode_index]["real"], params)
+        imag = self.get_eim(self.data.modes[mode_index]["imag"], params)
 
         return (
             CubicSpline(self.data.sur_time, real)(time)
             + 1j * CubicSpline(self.data.sur_time, imag)(time)
-        ) * jnp.exp(1j * mode[1] * orbital_phase)
+        ) * jnp.exp(1j * self.data.modes[mode_index]["mode"][1] * orbital_phase)
 
     def get_22_mode(
         self,
@@ -94,8 +86,8 @@ class SurrogateModel(eqx.Module):
         # 22 mode has weird dict that making a specical function is easier.
         q = params[0]
         params = params[None]
-        amp = self.get_eim(self.data.modes[(2, 2)]["amp"], params)
-        phase = -self.get_eim(self.data.modes[(2, 2)]["phase"], params)
+        amp = self.get_eim(self.data.modes[self.mode_22_index]["amp"], params)
+        phase = -self.get_eim(self.data.modes[self.mode_22_index]["phase"], params)
         phase = phase + get_T3_phase(q, self.data.sur_time)  # type: ignore
         amp_interp = CubicSpline(self.data.sur_time, amp)(time)
         phase_interp = CubicSpline(self.data.sur_time, phase)(time)
@@ -107,6 +99,7 @@ class SurrogateModel(eqx.Module):
     #     params: Float[Array, str("n_dim")],
     #     theta: float = 0.0,
     # ) -> Float[Array, str("n_sample")]:
+    #     modes = self.data.modes[1:]
     #     # Find a way to optimize it.
     #     waveform = jnp.zeros_like(time, dtype=jnp.complex64)
     #     new_dict = {key: value for key, value in self.data.modes if key != (2, 2)}

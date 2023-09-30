@@ -1,6 +1,8 @@
 import h5py
 from jaxNRSur.EIMPredictor import EIMpredictor
 import jax.numpy as jnp
+import equinox as eqx
+from jaxtyping import Array, Float
 
 h5_mode_tuple: dict[tuple[int, int], str] = {
     (2, 0): "ITEM_6",  # No Imaginary part
@@ -30,7 +32,10 @@ def h5Group_to_dict(h5_group: h5py.Group) -> dict:
     return result
 
 
-class SurrogateDataLoader:
+class SurrogateDataLoader(eqx.Module):
+    sur_time: Float[Array, str("n_sample")]
+    modes: list[dict]
+
     def __init__(
         self,
         path: str,
@@ -48,12 +53,12 @@ class SurrogateDataLoader:
             (5, 5),
         ],
     ) -> None:
-        self.data = h5py.File(path, "r")
-        self.sur_time = jnp.array(self.data["domain"])
+        data = h5py.File(path, "r")
+        self.sur_time = jnp.array(data["domain"])
 
-        self.modes = {}
+        self.modes = []
         for i in range(len(modelist)):
-            self.modes[modelist[i]] = self.read_single_mode(modelist[i])
+            self.modes.append(self.read_single_mode(data, modelist[i]))
 
     def read_function(self, node_data: h5py.Group) -> dict:
         try:
@@ -88,9 +93,18 @@ class SurrogateDataLoader:
         except ValueError:
             raise ValueError("n_nodes data doesn't exist")
 
-    def read_single_mode(self, mode: tuple[int, int]) -> dict:
+    @staticmethod
+    def make_empty_function(name: str, length: int) -> dict:
+        return {
+            "n_nodes": 1,
+            "predictors": [lambda x: 1],
+            "eim_basis": jnp.zeros((1, length)),
+            "name": name,
+        }
+
+    def read_single_mode(self, file: h5py.File, mode: tuple[int, int]) -> dict:
         result = {}
-        data = self.data["sur_subs/%s/func_subs" % (h5_mode_tuple[mode])]
+        data = file["sur_subs/%s/func_subs" % (h5_mode_tuple[mode])]
         assert isinstance(data, h5py.Group), "Mode data is not a group"
         if mode == (2, 2):
             result["phase"] = self.read_function(data["ITEM_0"])  # type: ignore
@@ -103,6 +117,13 @@ class SurrogateDataLoader:
                 local_function = self.read_function(data["ITEM_0"])  # type: ignore
                 if local_function["name"] == "re":
                     result["real"] = local_function
+                    result["imag"] = self.make_empty_function(
+                        "im", local_function["eim_basis"].shape[1]
+                    )
                 else:
                     result["imag"] = local_function
+                    result["real"] = self.make_empty_function(
+                        "re", local_function["eim_basis"].shape[1]
+                    )
+        result["mode"] = mode
         return result
