@@ -138,6 +138,13 @@ class SurrogateModel(eqx.Module):
         params: Float[Array, str("n_dim")],
         theta: float = 0.0,
     ) -> Float[Array, str("n_sample")]:
+        """
+        Current implementation sepearates the 22 mode from the rest of the modes,
+        because of the data strucutre and how they are combined.
+        This means the CubicSpline is called in a loop,
+        which is not ideal (double the run time).
+        We should merge the datastructure to make this more efficient.
+        """
         coeff = jnp.stack(jnp.array(self.get_multi_real_imag(self.mode_no22, params)))
         modes = eqx.filter_vmap(self.get_mode, in_axes=(0, 0, None, 0, None))(
             coeff[:, 0], coeff[:, 1], time, self.m_mode, theta
