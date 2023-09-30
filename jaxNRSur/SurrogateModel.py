@@ -6,6 +6,8 @@ from jaxNRSur.Harmonics import SpinWeightedSphericalHarmonics
 from jaxtyping import Array, Float, Int
 import equinox as eqx
 
+jax.config.update("jax_enable_x64", True)
+
 
 def get_T3_phase(q: float, t: Float[Array, str("n")], t_ref: float = 1000.0) -> float:
     eta = q / (1 + q) ** 2
