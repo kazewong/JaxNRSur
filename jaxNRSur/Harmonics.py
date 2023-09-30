@@ -1,5 +1,6 @@
 import jax.numpy as jnp
 from jaxtyping import Array, Float
+import equinox as eqx
 
 
 # factorial function
@@ -57,7 +58,12 @@ def s_lambda_lm(
         return Pn
 
 
-class SpinWeightedSphericalHarmonics:
+class SpinWeightedSphericalHarmonics(eqx.Module):
+    Pm_coeff: float
+    s_mode: int
+    l_mode: int
+    m_mode: int
+
     def __init__(
         self,
         s_mode: int,
@@ -84,10 +90,14 @@ class SpinWeightedSphericalHarmonics:
                 Pm = -Pm
 
         self.Pm_coeff = Pm
-        self.s = s_mode
-        self.l = l_mode
-        self.m = m_mode
+        self.s_mode = s_mode
+        self.l_mode = l_mode
+        self.m_mode = m_mode
 
     def __call__(self, theta: float, phi: float) -> Float[Array, str("1")]:
-        result = self.Pm_coeff * s_lambda_lm(self.s, self.l, self.m, jnp.cos(theta))
-        return result * jnp.cos(self.m * phi) + 1j * (result * jnp.sin(self.m * phi))
+        result = self.Pm_coeff * s_lambda_lm(
+            self.s_mode, self.l_mode, self.m_mode, jnp.cos(theta)
+        )
+        return result * jnp.cos(self.m_mode * phi) + 1j * (
+            result * jnp.sin(self.m_mode * phi)
+        )
