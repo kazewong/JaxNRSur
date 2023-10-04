@@ -148,13 +148,29 @@ class SurrogateModel(eqx.Module):
         We should merge the datastructure to make this more efficient.
         """
         coeff = jnp.stack(jnp.array(self.get_multi_real_imag(self.mode_no22, params)))
-        modes = eqx.filter_vmap(self.get_mode, in_axes=(0, 0, None, 0, None))(
-            coeff[:, 0], coeff[:, 1], time, self.m_mode, theta
-        )
+        coeff = coeff * jnp.exp(1j * self.m_mode * theta)[:, None, None]
+        harmonics = jnp.stack(
+            jax.tree_util.tree_map(
+                lambda f: f(theta, 0),
+                self.harmonics,
+                is_leaf=lambda x: isinstance(x, SpinWeightedSphericalHarmonics),
+            )
+        )[:, None, None]
+        modes = jnp.sum(coeff * harmonics, axis=0)
+        real = modes[0].real
+        imag = modes[1].imag
+
+        interp_mode = CubicSpline(self.data.sur_time, real)(time) + 1j * CubicSpline(
+            self.data.sur_time, imag
+        )(time)
+
+        # modes = eqx.filter_vmap(self.get_mode, in_axes=(0, 0, None, 0, None))(
+        #     coeff[:, 0], coeff[:, 1], time, self.m_mode, theta
+        # )
 
         waveform = jnp.zeros_like(time, dtype=jnp.complex64)
 
         waveform += self.get_22_mode(time, params, theta)
-        for i, harmonics in enumerate(self.harmonics):
-            waveform += modes[i] * harmonics(theta, 0)
-        return waveform
+        # for i, harmonics in enumerate(self.harmonics):
+        #     waveform += modes[i] * harmonics(theta, 0)
+        return waveform + interp_mode
