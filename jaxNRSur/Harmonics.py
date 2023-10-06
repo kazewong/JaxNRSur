@@ -98,6 +98,4 @@ class SpinWeightedSphericalHarmonics(eqx.Module):
         result = self.Pm_coeff * s_lambda_lm(
             self.s_mode, self.l_mode, self.m_mode, jnp.cos(theta)
         )
-        return result * jnp.cos(self.m_mode * phi) + 1j * (
-            result * jnp.sin(self.m_mode * phi)
-        )
+        return result * jnp.exp(1j * self.m_mode * phi)

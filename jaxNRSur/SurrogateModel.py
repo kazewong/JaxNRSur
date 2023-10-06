@@ -30,8 +30,10 @@ class SurrogateModel(eqx.Module):
     data: SurrogateDataLoader
     mode_no22: list[dict]
     harmonics: list[SpinWeightedSphericalHarmonics]
+    negative_harmonics: list[SpinWeightedSphericalHarmonics]
     mode_22_index: int
     m_mode: Int[Array, str("n_modes-1")]
+    negative_mode_prefactor: Int[Array, str("n_modes-1")]
 
     def __init__(
         self,
@@ -52,11 +54,21 @@ class SurrogateModel(eqx.Module):
     ):
         self.data = SurrogateDataLoader(data_path, modelist=modelist)
         self.harmonics = []
+        self.negative_harmonics = []
+        negative_mode_prefactor = []
         for mode in modelist:
             if mode != (2, 2):
                 self.harmonics.append(
                     SpinWeightedSphericalHarmonics(-2, mode[0], mode[1])
                 )
+                self.negative_harmonics.append(
+                    SpinWeightedSphericalHarmonics(-2, mode[0], -mode[1])
+                )
+            if mode[1] > 0:
+                negative_mode_prefactor.append((-1)**mode[0])
+            else:
+                negative_mode_prefactor.append(0)
+            
         self.mode_no22 = [
             self.data.modes[i] for i in range(len(self.data.modes)) if i != 0
         ]
@@ -66,6 +78,7 @@ class SurrogateModel(eqx.Module):
         self.m_mode = jnp.array(
             [modelist[i][1] for i in range(len(modelist)) if i != self.mode_22_index]
         )
+        self.negative_mode_prefactor = jnp.array(negative_mode_prefactor)
 
     @property
     def n_modes(self) -> int:
@@ -105,20 +118,19 @@ class SurrogateModel(eqx.Module):
         self,
         real: Float[Array, str("n_sample")],
         imag: Float[Array, str("n_sample")],
-        time: Float[Array, str("n_time")],
-        m_mode: int,
-        orbital_phase: float = 0.0,
+        time: Float[Array, str("n_time")]
     ) -> Float[Array, str("n_sample")]:
         return (
             CubicSpline(self.data.sur_time, real)(time)
             + 1j * CubicSpline(self.data.sur_time, imag)(time)
-        ) * jnp.exp(1j * m_mode * orbital_phase)
+        )
 
     def get_22_mode(
         self,
         time: Float[Array, str("n_samples")],
         params: Float[Array, str("n_dim")],
         theta: float = 0.0,
+        phi: float = 0.0,
     ) -> Float[Array, str("n_sample")]:
         # 22 mode has weird dict that making a specical function is easier.
         q = params[0]
@@ -131,7 +143,6 @@ class SurrogateModel(eqx.Module):
         return (
             amp_interp
             * jnp.exp(1j * phase_interp)
-            * SpinWeightedSphericalHarmonics(-2, 2, 2)(theta, 0)
         )
 
     def get_waveform(
@@ -139,6 +150,7 @@ class SurrogateModel(eqx.Module):
         time: Float[Array, str("n_sample")],
         params: Float[Array, str("n_dim")],
         theta: float = 0.0,
+        phi: float = 0.0,
     ) -> Float[Array, str("n_sample")]:
         """
         Current implementation sepearates the 22 mode from the rest of the modes,
@@ -148,13 +160,20 @@ class SurrogateModel(eqx.Module):
         We should merge the datastructure to make this more efficient.
         """
         coeff = jnp.stack(jnp.array(self.get_multi_real_imag(self.mode_no22, params)))
-        modes = eqx.filter_vmap(self.get_mode, in_axes=(0, 0, None, 0, None))(
-            coeff[:, 0], coeff[:, 1], time, self.m_mode, theta
+        modes = eqx.filter_vmap(self.get_mode, in_axes=(0, 0, None))(
+            coeff[:, 0], coeff[:, 1], time
         )
 
         waveform = jnp.zeros_like(time, dtype=jnp.complex64)
 
-        waveform += self.get_22_mode(time, params, theta)
+        h22 = self.get_22_mode(time, params, theta, phi)
+        waveform += h22 * \
+            SpinWeightedSphericalHarmonics(-2, 2, 2)(theta, phi)
+        waveform += jnp.conj(h22) * \
+            SpinWeightedSphericalHarmonics(-2, 2, -2)(theta, phi)
+            
         for i, harmonics in enumerate(self.harmonics):
-            waveform += modes[i] * harmonics(theta, 0)
+            waveform += modes[i] * harmonics(theta, phi)
+            waveform += self.negative_mode_prefactor[i] * jnp.conj(modes[i]) * \
+                self.negative_harmonics[i](theta, phi)
         return waveform
