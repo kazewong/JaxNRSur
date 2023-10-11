@@ -129,8 +129,6 @@ class SurrogateModel(eqx.Module):
         self,
         time: Float[Array, str("n_samples")],
         params: Float[Array, str("n_dim")],
-        theta: float = 0.0,
-        phi: float = 0.0,
     ) -> Float[Array, str("n_sample")]:
         # 22 mode has weird dict that making a specical function is easier.
         q = params[0]
@@ -160,29 +158,20 @@ class SurrogateModel(eqx.Module):
         We should merge the datastructure to make this more efficient.
         """
         coeff = jnp.stack(jnp.array(self.get_multi_real_imag(self.mode_no22, params)))
-        coeff = coeff * jnp.exp(1j * self.m_mode * theta)[:, None, None]
-        harmonics = jnp.stack(
-            jax.tree_util.tree_map(
-                lambda f: f(theta, 0),
-                self.harmonics,
-                is_leaf=lambda x: isinstance(x, SpinWeightedSphericalHarmonics),
-            )
-        )[:, None, None]
-        modes = jnp.sum(coeff * harmonics, axis=0)
-        real = modes[0].real
-        imag = modes[1].imag
-
-        interp_mode = CubicSpline(self.data.sur_time, real)(time) + 1j * CubicSpline(
-            self.data.sur_time, imag
-        )(time)
-
-        # modes = eqx.filter_vmap(self.get_mode, in_axes=(0, 0, None, 0, None))(
-        #     coeff[:, 0], coeff[:, 1], time, self.m_mode, theta
-        # )
-
+        modes = eqx.filter_vmap(self.get_mode, in_axes=(0, 0, None))(
+            coeff[:, 0], coeff[:, 1], time
+        )
+        
         waveform = jnp.zeros_like(time, dtype=jnp.complex64)
 
-        waveform += self.get_22_mode(time, params, theta)
-        # for i, harmonics in enumerate(self.harmonics):
-        #     waveform += modes[i] * harmonics(theta, 0)
-        return waveform + interp_mode
+        h22 = self.get_22_mode(time, params)
+        waveform += h22 * \
+            SpinWeightedSphericalHarmonics(-2, 2, 2)(theta, phi)
+        waveform += jnp.conj(h22) * \
+            SpinWeightedSphericalHarmonics(-2, 2, -2)(theta, phi)
+
+        for i, harmonics in enumerate(self.harmonics):
+            waveform += modes[i] * harmonics(theta, phi)
+            waveform += self.negative_mode_prefactor[i] * jnp.conj(modes[i]) * \
+                self.negative_harmonics[i](theta, phi)
+        return waveform
