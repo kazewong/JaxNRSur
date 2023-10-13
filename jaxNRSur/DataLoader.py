@@ -32,7 +32,7 @@ def h5Group_to_dict(h5_group: h5py.Group) -> dict:
     return result
 
 
-class SurrogateDataLoader(eqx.Module):
+class NRHybSur3dq8DataLoader(eqx.Module):
     sur_time: Float[Array, str("n_sample")]
     modes: list[dict]
 

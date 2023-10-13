@@ -1,7 +1,7 @@
 import jax.numpy as jnp
 import jax
 from jaxNRSur.Spline import CubicSpline
-from jaxNRSur.DataLoader import SurrogateDataLoader
+from jaxNRSur.DataLoader import NRHybSur3dq8DataLoader
 from jaxNRSur.Harmonics import SpinWeightedSphericalHarmonics
 from jaxtyping import Array, Float, Int
 import equinox as eqx
@@ -27,7 +27,7 @@ def effective_spin(q: float, chi1: float, chi2: float) -> tuple[float, float]:
 
 
 class SurrogateModel(eqx.Module):
-    data: SurrogateDataLoader
+    data: NRHybSur3dq8DataLoader
     mode_no22: list[dict]
     harmonics: list[SpinWeightedSphericalHarmonics]
     negative_harmonics: list[SpinWeightedSphericalHarmonics]
@@ -52,7 +52,7 @@ class SurrogateModel(eqx.Module):
             (5, 5),
         ],
     ):
-        self.data = SurrogateDataLoader(data_path, modelist=modelist)
+        self.data = NRHybSur3dq8DataLoader(data_path, modelist=modelist)
         self.harmonics = []
         self.negative_harmonics = []
         negative_mode_prefactor = []
