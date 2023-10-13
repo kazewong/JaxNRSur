@@ -121,6 +121,18 @@ class SurrogateModel(eqx.Module):
         theta: float = 0.0,
     ) -> Float[Array, str("n_sample")]:
         # 22 mode has weird dict that making a specical function is easier.
+        """
+        Get the 22 mode of the waveform.
+
+        Args:
+            time: The time of the waveform.
+            params: The parameters of the waveform.
+                The first parameter is the mass ratio. The rest are the spin parameters.
+            theta: The polar angle of the waveform.
+
+        Returns:
+            The 22 mode of the waveform.
+        """
         q = params[0]
         params = params[None]
         amp = self.get_eim(self.data.modes[self.mode_22_index]["amp"], params)
