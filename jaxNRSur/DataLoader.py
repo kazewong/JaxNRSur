@@ -153,8 +153,7 @@ class NRSur7dq4DataLoader(eqx.Module):
             (4, 4),
         ],
     ) -> None:
-        data = h5py.File(path, "r")
-        assert isinstance(data, h5py.Dataset)
+        data = h5Group_to_dict(h5py.File(path, "r"))
         self.t_coorb = jnp.array(data["t_coorb"])
 
         self.modes_plus = []
@@ -163,7 +162,7 @@ class NRSur7dq4DataLoader(eqx.Module):
             self.modes_plus.append(self.read_single_mode(data, modelist[i]))
             self.modes_minus.append(self.read_single_mode(data, modelist[i]))
 
-    def read_function(self, node_data: h5py.Dataset) -> dict:
+    def read_function(self, node_data: dict) -> dict:
         result = {}
         n_nodes = len(node_data["nodeIndices"])  # type: ignore
         result["n_nodes"] = n_nodes
@@ -178,10 +177,10 @@ class NRSur7dq4DataLoader(eqx.Module):
 
         result["predictors"] = predictors
         result["eim_basis"] = jnp.array(node_data["EIBasis"])
-        result["name"] = node_data.name.lstrip("/")  # type: ignore
+        # result["name"] = node_data.name.lstrip("/")  # type: ignore
         return result
 
-    def read_single_mode(self, file: h5py.Dataset, mode: tuple[int, int]) -> dict:
+    def read_single_mode(self, file: dict, mode: tuple[int, int]) -> dict:
         result = {}
         if mode[1] != 0:
             result["real_plus"] = self.read_function(
