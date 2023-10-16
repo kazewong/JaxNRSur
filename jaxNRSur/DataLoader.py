@@ -1,5 +1,6 @@
 import h5py
 from jaxNRSur.EIMPredictor import EIMpredictor
+from jaxNRSur.PolyPredictor import polypredictor
 import jax.numpy as jnp
 import equinox as eqx
 from jaxtyping import Array, Float
@@ -129,9 +130,10 @@ class NRHybSur3dq8DataLoader(eqx.Module):
         return result
 
 
-class NRHybSur7dq4DataLoader(eqx.Module):
-    sur_time: Float[Array, str("n_sample")]
-    modes: list[dict]
+class NRSur7dq4DataLoader(eqx.Module):
+    t_coorb: Float[Array, str("n_sample")]
+    modes_plus: list[dict]
+    modes_minus: list[dict]
 
     def __init__(
         self,
@@ -152,6 +154,7 @@ class NRHybSur7dq4DataLoader(eqx.Module):
         ],
     ) -> None:
         data = h5py.File(path, "r")
+        assert isinstance(data, h5py.Dataset)
         self.t_coorb = jnp.array(data["t_coorb"])
 
         self.modes_plus = []
@@ -160,47 +163,49 @@ class NRHybSur7dq4DataLoader(eqx.Module):
             self.modes_plus.append(self.read_single_mode(data, modelist[i]))
             self.modes_minus.append(self.read_single_mode(data, modelist[i]))
 
-    def read_function(self, node_data: h5py.Group) -> dict:
+    def read_function(self, node_data: h5py.Dataset) -> dict:
         result = {}
-        n_nodes = int(node_data["n_nodes"][()])  # type: ignore
+        n_nodes = len(node_data["nodeIndices"])  # type: ignore
         result["n_nodes"] = n_nodes
 
         predictors = []
-        for count in range(n_nodes):
-            try:
-                fit_data = node_data[
-                    "node_functions/ITEM_%d/node_function/DICT_fit_data"
-                    % (count)
-                ]
-            except ValueError:
-                raise ValueError("GPR Fit info doesn't exist")
+        for count in range(n_nodes):  # n_nodes is the n which you iterate over
+            coefs = jnp.array(node_data["nodeModelers"][f"coefs_{count}"])
+            bfOrders = jnp.array(node_data["nodeModelers"][f"bfOrders_{count}"])
 
-            assert isinstance(
-                fit_data, h5py.Group
-            ), "GPR Fit info is not a group"
-            res = h5Group_to_dict(fit_data)
-            node_predictor = EIMpredictor(res)
+            node_predictor = polypredictor(coefs, bfOrders)
             predictors.append(node_predictor)
 
         result["predictors"] = predictors
-        result["eim_basis"] = jnp.array(node_data["ei_basis"])
-        result["name"] = node_data["name"][()].decode("utf-8")  # type: ignore
+        result["eim_basis"] = jnp.array(node_data["EIBasis"])
+        result["name"] = node_data.name.lstrip("/")  # type: ignore
         return result
-            
 
-    def read_single_mode(self, file: h5py.File, mode: tuple[int, int]) -> dict:
+    def read_single_mode(self, file: h5py.Dataset, mode: tuple[int, int]) -> dict:
         result = {}
         if mode[1] != 0:
-            result['real_plus'] = self.read_function(file[f'hCoorb_{mode[0]}_{mode[1]}_Re+'])
-            result['imag_plus'] = self.read_function(file[f'hCoorb_{mode[0]}_{mode[1]}_Im+'])
-            
-            result['real_minus'] = self.read_function(file[f'hCoorb_{mode[0]}_{mode[1]}_Re-'])
-            result['imag_minus'] = self.read_function(file[f'hCoorb_{mode[0]}_{mode[1]}_Im-'])
-            
+            result["real_plus"] = self.read_function(
+                file[f"hCoorb_{mode[0]}_{mode[1]}_Re+"]
+            )
+            result["imag_plus"] = self.read_function(
+                file[f"hCoorb_{mode[0]}_{mode[1]}_Im+"]
+            )
+
+            result["real_minus"] = self.read_function(
+                file[f"hCoorb_{mode[0]}_{mode[1]}_Re-"]
+            )
+            result["imag_minus"] = self.read_function(
+                file[f"hCoorb_{mode[0]}_{mode[1]}_Im-"]
+            )
+
         else:
-            result['real'] = self.read_function(file[f'hCoorb_{mode[0]}_{mode[1]}_real'])
-            result['imag'] = self.read_function(file[f'hCoorb_{mode[0]}_{mode[1]}_imag'])
-            
-        result['mode'] = mode
-        
+            result["real"] = self.read_function(
+                file[f"hCoorb_{mode[0]}_{mode[1]}_real"]
+            )
+            result["imag"] = self.read_function(
+                file[f"hCoorb_{mode[0]}_{mode[1]}_imag"]
+            )
+
+        result["mode"] = mode
+
         return result
