@@ -2,6 +2,7 @@ import h5py
 from jaxNRSur.EIMPredictor import EIMpredictor
 from jaxNRSur.PolyPredictor import polypredictor
 import jax.numpy as jnp
+import jax
 import equinox as eqx
 from jaxtyping import Array, Float
 
@@ -134,6 +135,7 @@ class NRSur7dq4DataLoader(eqx.Module):
     t_coorb: Float[Array, str("n_sample")]
     modes_plus: list[dict]
     modes_minus: list[dict]
+    basis_nodes_max: int
 
     def __init__(
         self,
@@ -156,13 +158,36 @@ class NRSur7dq4DataLoader(eqx.Module):
         data = h5Group_to_dict(h5py.File(path, "r"))
         self.t_coorb = jnp.array(data["t_coorb"])
 
+        # TODO needing to do this twice is not efficient but it doesn't really
+        # matter as it's in the loading step
+        modes_plus = []
+        modes_minus = []
+        for i in range(len(modelist)):
+            modes_plus.append(self.read_single_mode(data, modelist[i], n_max=0))
+            modes_minus.append(self.read_single_mode(data, modelist[i], n_max=0))
+
+        a = eqx.partition(
+            modes_plus + modes_minus,
+            lambda x: isinstance(x, polypredictor),
+            is_leaf=lambda x: isinstance(x, polypredictor),
+        )
+        c = jax.tree_util.tree_map(
+            lambda x: x.n_nodes, a[0], is_leaf=lambda x: isinstance(x, polypredictor)
+        )
+        list_basis_nodes = jax.tree_util.tree_leaves(c)
+        self.basis_nodes_max = int(max(list_basis_nodes))
+
         self.modes_plus = []
         self.modes_minus = []
         for i in range(len(modelist)):
-            self.modes_plus.append(self.read_single_mode(data, modelist[i]))
-            self.modes_minus.append(self.read_single_mode(data, modelist[i]))
+            self.modes_plus.append(
+                self.read_single_mode(data, modelist[i], n_max=self.basis_nodes_max)
+            )
+            self.modes_minus.append(
+                self.read_single_mode(data, modelist[i], n_max=self.basis_nodes_max)
+            )
 
-    def read_function(self, node_data: dict) -> dict:
+    def read_function(self, node_data: dict, n_max: int) -> dict:
         result = {}
         n_nodes = len(node_data["nodeIndices"])  # type: ignore
         result["n_nodes"] = n_nodes
@@ -172,37 +197,38 @@ class NRSur7dq4DataLoader(eqx.Module):
             coefs = jnp.array(node_data["nodeModelers"][f"coefs_{count}"])
             bfOrders = jnp.array(node_data["nodeModelers"][f"bfOrders_{count}"])
 
-            node_predictor = polypredictor(coefs, bfOrders)
+            n_max_f = max([coefs.shape[0], n_max])
+
+            node_predictor = polypredictor(coefs, bfOrders, n_max_f)
             predictors.append(node_predictor)
 
         result["predictors"] = predictors
         result["eim_basis"] = jnp.array(node_data["EIBasis"])
-        # result["name"] = node_data.name.lstrip("/")  # type: ignore
         return result
 
-    def read_single_mode(self, file: dict, mode: tuple[int, int]) -> dict:
+    def read_single_mode(self, file: dict, mode: tuple[int, int], n_max: int) -> dict:
         result = {}
         if mode[1] != 0:
             result["real_plus"] = self.read_function(
-                file[f"hCoorb_{mode[0]}_{mode[1]}_Re+"]
+                file[f"hCoorb_{mode[0]}_{mode[1]}_Re+"], n_max
             )
             result["imag_plus"] = self.read_function(
-                file[f"hCoorb_{mode[0]}_{mode[1]}_Im+"]
+                file[f"hCoorb_{mode[0]}_{mode[1]}_Im+"], n_max
             )
 
             result["real_minus"] = self.read_function(
-                file[f"hCoorb_{mode[0]}_{mode[1]}_Re-"]
+                file[f"hCoorb_{mode[0]}_{mode[1]}_Re-"], n_max
             )
             result["imag_minus"] = self.read_function(
-                file[f"hCoorb_{mode[0]}_{mode[1]}_Im-"]
+                file[f"hCoorb_{mode[0]}_{mode[1]}_Im-"], n_max
             )
 
         else:
             result["real"] = self.read_function(
-                file[f"hCoorb_{mode[0]}_{mode[1]}_real"]
+                file[f"hCoorb_{mode[0]}_{mode[1]}_real"], n_max
             )
             result["imag"] = self.read_function(
-                file[f"hCoorb_{mode[0]}_{mode[1]}_imag"]
+                file[f"hCoorb_{mode[0]}_{mode[1]}_imag"], n_max
             )
 
         result["mode"] = mode
