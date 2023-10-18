@@ -133,9 +133,12 @@ class NRHybSur3dq8DataLoader(eqx.Module):
 
 class NRSur7dq4DataLoader(eqx.Module):
     t_coorb: Float[Array, str("n_sample")]
+    t_ds: Float[Array, str("n_dynam")]
     modes_plus: list[dict]
     modes_minus: list[dict]
     basis_nodes_max: int
+    coorb: dict
+    coorb_nodes_max: int
 
     def __init__(
         self,
@@ -157,6 +160,7 @@ class NRSur7dq4DataLoader(eqx.Module):
     ) -> None:
         data = h5Group_to_dict(h5py.File(path, "r"))
         self.t_coorb = jnp.array(data["t_coorb"])
+        self.t_ds = jnp.array(data["t_ds"])
 
         # TODO needing to do this twice is not efficient but it doesn't really
         # matter as it's in the loading step
@@ -187,7 +191,22 @@ class NRSur7dq4DataLoader(eqx.Module):
                 self.read_single_mode(data, modelist[i], n_max=self.basis_nodes_max)
             )
 
-    def read_function(self, node_data: dict, n_max: int) -> dict:
+        # Setting up the coorbital polyfit
+        coorb = self.read_coorb(data, 0)
+        a = eqx.partition(
+            [i for j in list(coorb.values()) for i in j],
+            lambda x: isinstance(x, polypredictor),
+            is_leaf=lambda x: isinstance(x, polypredictor),
+        )
+        c = jax.tree_util.tree_map(
+            lambda x: x.n_nodes, a[0], is_leaf=lambda x: isinstance(x, polypredictor)
+        )
+        list_coorb_nodes = jax.tree_util.tree_leaves(c)
+
+        self.coorb_nodes_max = int(max(list_coorb_nodes))
+        self.coorb = self.read_coorb(data, self.coorb_nodes_max)
+
+    def read_mode_function(self, node_data: dict, n_max: int) -> dict:
         result = {}
         n_nodes = len(node_data["nodeIndices"])  # type: ignore
         result["n_nodes"] = n_nodes
@@ -197,9 +216,7 @@ class NRSur7dq4DataLoader(eqx.Module):
             coefs = jnp.array(node_data["nodeModelers"][f"coefs_{count}"])
             bfOrders = jnp.array(node_data["nodeModelers"][f"bfOrders_{count}"])
 
-            n_max_f = max([coefs.shape[0], n_max])
-
-            node_predictor = polypredictor(coefs, bfOrders, n_max_f)
+            node_predictor = polypredictor(coefs, bfOrders, n_max)
             predictors.append(node_predictor)
 
         result["predictors"] = predictors
@@ -209,28 +226,110 @@ class NRSur7dq4DataLoader(eqx.Module):
     def read_single_mode(self, file: dict, mode: tuple[int, int], n_max: int) -> dict:
         result = {}
         if mode[1] != 0:
-            result["real_plus"] = self.read_function(
+            result["real_plus"] = self.read_mode_function(
                 file[f"hCoorb_{mode[0]}_{mode[1]}_Re+"], n_max
             )
-            result["imag_plus"] = self.read_function(
+            result["imag_plus"] = self.read_mode_function(
                 file[f"hCoorb_{mode[0]}_{mode[1]}_Im+"], n_max
             )
 
-            result["real_minus"] = self.read_function(
+            result["real_minus"] = self.read_mode_function(
                 file[f"hCoorb_{mode[0]}_{mode[1]}_Re-"], n_max
             )
-            result["imag_minus"] = self.read_function(
+            result["imag_minus"] = self.read_mode_function(
                 file[f"hCoorb_{mode[0]}_{mode[1]}_Im-"], n_max
             )
 
         else:
-            result["real"] = self.read_function(
+            result["real"] = self.read_mode_function(
                 file[f"hCoorb_{mode[0]}_{mode[1]}_real"], n_max
             )
-            result["imag"] = self.read_function(
+            result["imag"] = self.read_mode_function(
                 file[f"hCoorb_{mode[0]}_{mode[1]}_imag"], n_max
             )
 
         result["mode"] = mode
+
+        return result
+
+    def read_coorb(self, file: dict, n_max: int) -> dict:
+        result = {}
+
+        result["chiA_0_predictors"] = [
+            polypredictor(
+                file[f"ds_node_{i}"]["chiA_0_coefs"],
+                file[f"ds_node_{i}"]["chiA_0_bfOrders"],
+                n_max,
+            )
+            for i in range((len(self.t_ds)))
+        ]
+        result["chiA_1_predictors"] = [
+            polypredictor(
+                file[f"ds_node_{i}"]["chiA_1_coefs"],
+                file[f"ds_node_{i}"]["chiA_1_bfOrders"],
+                n_max,
+            )
+            for i in range((len(self.t_ds)))
+        ]
+        result["chiA_2_predictors"] = [
+            polypredictor(
+                file[f"ds_node_{i}"]["chiA_2_coefs"],
+                file[f"ds_node_{i}"]["chiA_2_bfOrders"],
+                n_max,
+            )
+            for i in range((len(self.t_ds)))
+        ]
+
+        result["chiB_0_predictors"] = [
+            polypredictor(
+                file[f"ds_node_{i}"]["chiB_0_coefs"],
+                file[f"ds_node_{i}"]["chiB_0_bfOrders"],
+                n_max,
+            )
+            for i in range((len(self.t_ds)))
+        ]
+        result["chiB_1_predictors"] = [
+            polypredictor(
+                file[f"ds_node_{i}"]["chiB_1_coefs"],
+                file[f"ds_node_{i}"]["chiB_1_bfOrders"],
+                n_max,
+            )
+            for i in range((len(self.t_ds)))
+        ]
+        result["chiB_2_predictors"] = [
+            polypredictor(
+                file[f"ds_node_{i}"]["chiB_2_coefs"],
+                file[f"ds_node_{i}"]["chiB_2_bfOrders"],
+                n_max,
+            )
+            for i in range((len(self.t_ds)))
+        ]
+
+        result["omega_predictors"] = [
+            polypredictor(
+                file[f"ds_node_{i}"]["omega_coefs"],
+                file[f"ds_node_{i}"]["omega_bfOrders"],
+                n_max,
+            )
+            for i in range((len(self.t_ds)))
+        ]
+
+        result["omega_orb_0_predictors"] = [
+            polypredictor(
+                file[f"ds_node_{i}"]["omega_orb_0_coefs"],
+                file[f"ds_node_{i}"]["omega_orb_0_bfOrders"],
+                n_max,
+            )
+            for i in range((len(self.t_ds)))
+        ]
+
+        result["omega_orb_1_predictors"] = [
+            polypredictor(
+                file[f"ds_node_{i}"]["omega_orb_1_coefs"],
+                file[f"ds_node_{i}"]["omega_orb_1_bfOrders"],
+                n_max,
+            )
+            for i in range((len(self.t_ds)))
+        ]
 
         return result

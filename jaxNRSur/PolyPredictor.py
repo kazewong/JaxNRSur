@@ -17,12 +17,12 @@ class polypredictor(eqx.Module):
         super().__init__()
 
         n_node = bfOrders.shape[0]
+        self.n_max = max([n_max, n_node])
         n_lambda = bfOrders.shape[1]
-        self.coefs = jnp.zeros((n_max,))
-        self.bfOrders = jnp.zeros((n_max, n_lambda))
+        self.coefs = jnp.zeros((self.n_max,))
+        self.bfOrders = jnp.zeros((self.n_max, n_lambda))
         self.coefs = self.coefs.at[:n_node].set(coefs)
         self.bfOrders = self.bfOrders.at[:n_node].set(bfOrders)
-        self.n_max = n_max
 
     # TODO think about padding the arrays to allow for vmapping on the function
     def __call__(
