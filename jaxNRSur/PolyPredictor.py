@@ -26,7 +26,7 @@ class polypredictor(eqx.Module):
 
     # TODO think about padding the arrays to allow for vmapping on the function
     def __call__(
-        self, X: Float[Array, str("n_sample n_lambda")]
+        self, X: Float[Array, str("n_lambda n_sample")]
     ) -> Float[Array, str("n_sample")]:
         return jnp.dot(
             self.coefs,
