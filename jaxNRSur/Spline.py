@@ -22,20 +22,18 @@ class CubicSpline:
     def get_value(self, x: Float[Array, str("n")]) -> Float[Array, str("n")]:
         bin = jnp.digitize(x, self.x_grid)
         result = (
-            self.coeff[bin - 1] * (self.x_grid[bin] - x) ** 3 / (6 * self.diff_x[bin])
+            self.coeff[bin - 1] * (self.x_grid[bin] - x) ** 3 / (6 * self.diff_x[bin-1])
         )
         result += (
-            self.coeff[bin] * (x - self.x_grid[bin - 1]) ** 3 / (6 * self.diff_x[bin])
+            self.coeff[bin] * (x - self.x_grid[bin - 1]) ** 3 / (6 * self.diff_x[bin-1])
         )
         result += (
-            (self.y_grid[bin - 1] - self.coeff[bin - 1] * self.diff_x[bin] ** 2 / 6)
-            * (self.x_grid[bin] - x)
-            / self.diff_x[bin]
+            (self.y_grid[bin - 1] - self.coeff[bin - 1] * self.diff_x[bin-1] ** 2 / 6)
+            * (self.x_grid[bin] - x) / self.diff_x[bin-1]
         )
         result += (
-            (self.y_grid[bin] - self.coeff[bin] * self.diff_x[bin] ** 2 / 6)
-            * (x - self.x_grid[bin - 1])
-            / self.diff_x[bin]
+            (self.y_grid[bin] - self.coeff[bin] * self.diff_x[bin-1] ** 2 / 6)
+            * (x - self.x_grid[bin - 1]) / self.diff_x[bin-1]
         )
         return result
 
