@@ -9,7 +9,7 @@ import equinox as eqx
 jax.config.update("jax_enable_x64", True)
 
 
-def get_T3_phase(q: float, t: Float[Array, str("n")], t_ref: float = 1000.0) -> float:
+def get_T3_phase(q: float, t: Float[Array, " n"], t_ref: float = 1000.0) -> float:
     eta = q / (1 + q) ** 2
     theta_raw = (eta * (t_ref - t) / 5) ** (-1.0 / 8)
     theta_cal = (eta * (t_ref + 1000) / 5) ** (-1.0 / 8)
@@ -32,8 +32,8 @@ class NRHybSur3dq8Model(eqx.Module):
     harmonics: list[SpinWeightedSphericalHarmonics]
     negative_harmonics: list[SpinWeightedSphericalHarmonics]
     mode_22_index: int
-    m_mode: Int[Array, str("n_modes-1")]
-    negative_mode_prefactor: Int[Array, str("n_modes-1")]
+    m_mode: Int[Array, " n_modes-1"]
+    negative_mode_prefactor: Int[Array, " n_modes-1"]
 
     def __init__(
         self,
@@ -86,8 +86,8 @@ class NRHybSur3dq8Model(eqx.Module):
 
     @staticmethod
     def get_eim(
-        eim_dict: dict, params: Float[Array, str("n_dim")]
-    ) -> Float[Array, str("n_sample")]:
+        eim_dict: dict, params: Float[Array, " n_dim"]
+    ) -> Float[Array, " n_sample"]:
         result = jnp.zeros((eim_dict["n_nodes"], 1))
         for i in range(eim_dict["n_nodes"]):
             result = result.at[i].set(eim_dict["predictors"][i](params))
@@ -95,8 +95,8 @@ class NRHybSur3dq8Model(eqx.Module):
 
     @staticmethod
     def get_real_imag(
-        mode: dict, params: Float[Array, str("n_dim")]
-    ) -> tuple[Float[Array, str("n_sample")], Float[Array, str("n_sample")]]:
+        mode: dict, params: Float[Array, " n_dim"]
+    ) -> tuple[Float[Array, " n_sample"], Float[Array, " n_sample"]]:
         params = params[None]
         real = NRHybSur3dq8Model.get_eim(mode["real"], params)
         imag = NRHybSur3dq8Model.get_eim(mode["imag"], params)
@@ -104,10 +104,8 @@ class NRHybSur3dq8Model(eqx.Module):
 
     @staticmethod
     def get_multi_real_imag(
-        modes: list[dict], params: Float[Array, str("n_dim")]
-    ) -> tuple[
-        list[Float[Array, str("n_sample")]], list[Float[Array, str("n_sample")]]
-    ]:
+        modes: list[dict], params: Float[Array, " n_dim"]
+    ) -> tuple[list[Float[Array, " n_sample"]], list[Float[Array, " n_sample"]]]:
         return jax.tree_util.tree_map(
             lambda mode: __class__.get_real_imag(mode, params),
             modes,
@@ -116,19 +114,19 @@ class NRHybSur3dq8Model(eqx.Module):
 
     def get_mode(
         self,
-        real: Float[Array, str("n_sample")],
-        imag: Float[Array, str("n_sample")],
-        time: Float[Array, str("n_time")],
-    ) -> Float[Array, str("n_sample")]:
+        real: Float[Array, " n_sample"],
+        imag: Float[Array, " n_sample"],
+        time: Float[Array, " n_time"],
+    ) -> Float[Array, " n_sample"]:
         return CubicSpline(self.data.sur_time, real)(time) + 1j * CubicSpline(
             self.data.sur_time, imag
         )(time)
 
     def get_22_mode(
         self,
-        time: Float[Array, str("n_samples")],
-        params: Float[Array, str("n_dim")],
-    ) -> Float[Array, str("n_sample")]:
+        time: Float[Array, " n_samples"],
+        params: Float[Array, " n_dim"],
+    ) -> Float[Array, " n_sample"]:
         # 22 mode has weird dict that making a specical function is easier.
         q = params[0]
         params = params[None]
@@ -141,11 +139,11 @@ class NRHybSur3dq8Model(eqx.Module):
 
     def get_waveform(
         self,
-        time: Float[Array, str("n_sample")],
-        params: Float[Array, str("n_dim")],
+        time: Float[Array, " n_sample"],
+        params: Float[Array, " n_dim"],
         theta: float = 0.0,
         phi: float = 0.0,
-    ) -> Float[Array, str("n_sample")]:
+    ) -> Float[Array, " n_sample"]:
         """
         Current implementation sepearates the 22 mode from the rest of the modes,
         because of the data strucutre and how they are combined.
@@ -209,8 +207,8 @@ class NRSur7dq4Model(eqx.Module):
             )
 
     def _get_coorb_params(
-        self, q: float, Omega: Float[Array, str("n_Omega")]
-    ) -> Float[Array, str("n_dim")]:
+        self, q: float, Omega: Float[Array, " n_Omega"]
+    ) -> Float[Array, " n_dim"]:
         # First construct array for coorbital frame
         # borrowing notation from gwsurrogate
         coorb_x = jnp.zeros(7)
@@ -229,9 +227,7 @@ class NRSur7dq4Model(eqx.Module):
 
         return coorb_x
 
-    def _get_fit_params(
-        self, x: Float[Array, str("n_dim")]
-    ) -> Float[Array, str("n_dim")]:
+    def _get_fit_params(self, x: Float[Array, " n_dim"]) -> Float[Array, " n_dim"]:
         # Generate fit params
         fit_params = jnp.zeros(7)
 
@@ -253,8 +249,8 @@ class NRSur7dq4Model(eqx.Module):
         return fit_params
 
     def get_Omega_derivative_from_index(
-        self, i: Int, q: float, Omega_i: Float[Array, str("n_Omega")]
-    ) -> Float[Array, str("n_Omega")]:
+        self, i: Int, q: float, Omega_i: Float[Array, " n_Omega"]
+    ) -> Float[Array, " n_Omega"]:
         coorb_x = self._get_coorb_params(q, Omega_i)
         fit_params = self._get_fit_params(coorb_x)[:, jnp.newaxis]
 
@@ -312,14 +308,14 @@ class NRSur7dq4Model(eqx.Module):
         return dOmega_dt
 
     def forward_euler(
-        self, timestep: Int, q: float, Omega_i: Float[Array, str("n_Omega")]
-    ) -> Float[Array, str("n_Omega")]:
+        self, timestep: Int, q: float, Omega_i: Float[Array, " n_Omega"]
+    ) -> Float[Array, " n_Omega"]:
         dOmega_dt = self.get_Omega_derivative_from_index(timestep, q, Omega_i)
         return Omega_i + dOmega_dt * self.data.diff_t_ds[timestep]
 
     def normalize_Omega(
-        self, Omega: Float[Array, str("n_Omega")], normA: float, normB: float
-    ) -> Float[Array, str("n_Omega")]:
+        self, Omega: Float[Array, " n_Omega"], normA: float, normB: float
+    ) -> Float[Array, " n_Omega"]:
         Omega_normed = jnp.zeros(len(Omega))
 
         nOmega = jnp.linalg.norm(Omega[:4])
@@ -334,13 +330,13 @@ class NRSur7dq4Model(eqx.Module):
 
     def get_waveform(
         self,
-        time: Float[Array, str("n_sample")],
-        params: Float[Array, str("n_dim")],
+        time: Float[Array, " n_sample"],
+        params: Float[Array, " n_dim"],
         theta: float = 0.0,
         phi: float = 0.0,
-        init_quat: Float[Array, str("n_quat")] = jnp.array([1, 0, 0, 0]),
+        init_quat: Float[Array, " n_quat"] = jnp.array([1, 0, 0, 0]),
         init_orb_phase: float = 0,
-    ) -> Float[Array, str("n_sample")]:
+    ) -> Float[Array, " n_sample"]:
         # TODO set up the appropriate t_low etc
 
         # Initialize Omega with structure:

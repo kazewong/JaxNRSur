@@ -4,14 +4,14 @@ import equinox as eqx
 
 
 class polypredictor(eqx.Module):
-    coefs: Float[Array, str("n_sum")]
-    bfOrders: Float[Array, str("n_sum n_lambda")]
+    coefs: Float[Array, " n_sum"]
+    bfOrders: Float[Array, " n_sum n_lambda"]
     n_max: Int
 
     def __init__(
         self,
-        coefs: Float[Array, str("n_sum")],
-        bfOrders: Float[Array, str("n_sum n_lambda")],
+        coefs: Float[Array, " n_sum"],
+        bfOrders: Float[Array, " n_sum n_lambda"],
         n_max: Int,
     ):
         super().__init__()
@@ -26,8 +26,8 @@ class polypredictor(eqx.Module):
 
     # TODO think about padding the arrays to allow for vmapping on the function
     def __call__(
-        self, X: Float[Array, str("n_lambda n_sample")]
-    ) -> Float[Array, str("n_sample")]:
+        self, X: Float[Array, " n_lambda n_sample"]
+    ) -> Float[Array, " n_sample"]:
         return jnp.dot(
             self.coefs,
             jnp.prod(

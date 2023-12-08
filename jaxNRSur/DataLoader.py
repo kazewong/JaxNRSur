@@ -35,7 +35,7 @@ def h5Group_to_dict(h5_group: h5py.Group) -> dict:
 
 
 class NRHybSur3dq8DataLoader(eqx.Module):
-    sur_time: Float[Array, str("n_sample")]
+    sur_time: Float[Array, " n_sample"]
     modes: list[dict]
 
     def __init__(
@@ -132,9 +132,9 @@ class NRHybSur3dq8DataLoader(eqx.Module):
 
 
 class NRSur7dq4DataLoader(eqx.Module):
-    t_coorb: Float[Array, str("n_sample")]
-    t_ds: Float[Array, str("n_dynam")]
-    diff_t_ds: Float[Array, str("n_dynam-1")]
+    t_coorb: Float[Array, " n_sample"]
+    t_ds: Float[Array, " n_dynam"]
+    diff_t_ds: Float[Array, " n_dynam-1"]
     modes_plus: list[dict]
     modes_minus: list[dict]
     basis_nodes_max: int
