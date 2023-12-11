@@ -179,6 +179,10 @@ class NRSur7dq4Model(eqx.Module):
     harmonics: list[SpinWeightedSphericalHarmonics]
     negative_harmonics: list[SpinWeightedSphericalHarmonics]
 
+    @property
+    def coorb_keys(self):
+        return list(self.data.coorb.keys())
+
     def __init__(
         self,
         data_path: str,
@@ -254,21 +258,35 @@ class NRSur7dq4Model(eqx.Module):
         coorb_x = self._get_coorb_params(q, Omega_i)
         fit_params = self._get_fit_params(coorb_x)[:, jnp.newaxis]
 
-        omega_orb_0_fit = self.data.coorb[f"ds_node_{i}"]["omega_orb_0_predictors"](
+        omega_orb_0_fit = self.data.coorb[self.coorb_keys[i]]["omega_orb_0_predictors"](
             fit_params
         )[0]
-        omega_orb_1_fit = self.data.coorb[f"ds_node_{i}"]["omega_orb_1_predictors"](
+        omega_orb_1_fit = self.data.coorb[self.coorb_keys[i]]["omega_orb_1_predictors"](
             fit_params
         )[0]
-        omega_fit = self.data.coorb[f"ds_node_{i}"]["omega_predictors"](fit_params)[0]
+        omega_fit = self.data.coorb[self.coorb_keys[i]]["omega_predictors"](fit_params)[
+            0
+        ]
 
-        chiA_0_fit = self.data.coorb[f"ds_node_{i}"]["chiA_0_predictors"](fit_params)[0]
-        chiA_1_fit = self.data.coorb[f"ds_node_{i}"]["chiA_1_predictors"](fit_params)[0]
-        chiA_2_fit = self.data.coorb[f"ds_node_{i}"]["chiA_2_predictors"](fit_params)[0]
+        chiA_0_fit = self.data.coorb[self.coorb_keys[i]]["chiA_0_predictors"](
+            fit_params
+        )[0]
+        chiA_1_fit = self.data.coorb[self.coorb_keys[i]]["chiA_1_predictors"](
+            fit_params
+        )[0]
+        chiA_2_fit = self.data.coorb[self.coorb_keys[i]]["chiA_2_predictors"](
+            fit_params
+        )[0]
 
-        chiB_0_fit = self.data.coorb[f"ds_node_{i}"]["chiB_0_predictors"](fit_params)[0]
-        chiB_1_fit = self.data.coorb[f"ds_node_{i}"]["chiB_1_predictors"](fit_params)[0]
-        chiB_2_fit = self.data.coorb[f"ds_node_{i}"]["chiB_2_predictors"](fit_params)[0]
+        chiB_0_fit = self.data.coorb[self.coorb_keys[i]]["chiB_0_predictors"](
+            fit_params
+        )[0]
+        chiB_1_fit = self.data.coorb[self.coorb_keys[i]]["chiB_1_predictors"](
+            fit_params
+        )[0]
+        chiB_2_fit = self.data.coorb[self.coorb_keys[i]]["chiB_2_predictors"](
+            fit_params
+        )[0]
 
         # Converting to dOmega_dt array
         dOmega_dt = jnp.zeros(len(Omega_i))
@@ -308,7 +326,7 @@ class NRSur7dq4Model(eqx.Module):
         return dOmega_dt
 
     def forward_euler(
-        self, timestep: Int, q: float, Omega_i: Float[Array, " n_Omega"]
+        self, timestep: Int, q: Float, Omega_i: Float[Array, " n_Omega"]
     ) -> Float[Array, " n_Omega"]:
         dOmega_dt = self.get_Omega_derivative_from_index(timestep, q, Omega_i)
         return Omega_i + dOmega_dt * self.data.diff_t_ds[timestep]
@@ -328,6 +346,19 @@ class NRSur7dq4Model(eqx.Module):
 
         return Omega_normed
 
+    def timestepping_kernel(self, i: int, state: dict) -> dict:
+        state["Omega"].at[state["i"] + 1, :].set(
+            self.normalize_Omega(
+                self.forward_euler(
+                    state["i"], state["q"], state["Omega"][state["i"], :]
+                ),
+                state["normA"],
+                state["normB"],
+            )
+        )
+        state["i"] += 1
+        return state
+
     def get_waveform(
         self,
         time: Float[Array, " n_sample"],
@@ -342,7 +373,7 @@ class NRSur7dq4Model(eqx.Module):
         # Initialize Omega with structure:
         # Omega = [Quaterion, Orb phase, spin_1, spin_2]
         # Note that the spins are in the coprecessing frame
-        q = float(params[0])
+        q = params[0]
         Omega_0 = jnp.concatenate([init_quat, jnp.array([init_orb_phase]), params[1:]])
         Omega = jnp.zeros((len(self.data.t_ds), len(Omega_0)))
         Omega = Omega.at[0, :].set(Omega_0)
@@ -350,15 +381,14 @@ class NRSur7dq4Model(eqx.Module):
         normA = jnp.linalg.norm(params[1:4])
         normB = jnp.linalg.norm(params[4:7])
 
-        # integral timestepper
-        for timestep in range(len(self.data.t_ds) - 1):
-            Omega = Omega.at[timestep + 1, :].set(
-                self.normalize_Omega(
-                    self.forward_euler(timestep, q, Omega[timestep, :]), normA, normB
-                )
-            )
+        init_state = {"Omega": Omega, "q": q, "normA": normA, "normB": normB, "i": 0}
 
-        return Omega
+        # integral timestepper
+        state = jax.lax.fori_loop(
+            0, len(self.data.t_ds) - 1, self.timestepping_kernel, init_state
+        )
+
+        return state["Omega"]
 
         # coeff = jnp.stack(jnp.array(self.get_multi_real_imag(self.mode_no22, params)))
         # modes = eqx.filter_vmap(self.get_mode, in_axes=(0, 0, None))(
