@@ -24,17 +24,25 @@ class polypredictor(eqx.Module):
         self.coefs = self.coefs.at[:n_node].set(coefs)
         self.bfOrders = self.bfOrders.at[:n_node].set(bfOrders)
 
+    @staticmethod
+    def predict(
+        X: Float[Array, " n_lambda n_sample"],
+        coefs: Float[Array, " n_sum"],
+        bfOrders: Float[Array, " n_sum n_lambda"],
+    ):
+        return jnp.dot(
+            coefs,
+            jnp.prod(
+                jnp.power(X[jnp.newaxis, :, :], bfOrders[:, :, jnp.newaxis]),
+                axis=1,
+            ),
+        )
+
     # TODO think about padding the arrays to allow for vmapping on the function
     def __call__(
         self, X: Float[Array, " n_lambda n_sample"]
     ) -> Float[Array, " n_sample"]:
-        return jnp.dot(
-            self.coefs,
-            jnp.prod(
-                jnp.power(X[jnp.newaxis, :, :], self.bfOrders[:, :, jnp.newaxis]),
-                axis=1,
-            ),
-        )
+        return self.predict(X, self.coefs, self.bfOrders)
 
     @property
     def n_nodes(self) -> int:
