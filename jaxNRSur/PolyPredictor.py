@@ -3,7 +3,7 @@ from jaxtyping import Array, Float, Int
 import equinox as eqx
 
 
-class polypredictor(eqx.Module):
+class PolyPredictor(eqx.Module):
     coefs: Float[Array, " n_sum"]
     bfOrders: Float[Array, " n_sum n_lambda"]
     n_max: Int
@@ -36,7 +36,7 @@ class polypredictor(eqx.Module):
                 jnp.power(X[jnp.newaxis, :, :], bfOrders[:, :, jnp.newaxis]),
                 axis=1,
             ),
-        )
+        )[0]
 
     # TODO think about padding the arrays to allow for vmapping on the function
     def __call__(

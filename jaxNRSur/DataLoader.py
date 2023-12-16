@@ -1,8 +1,7 @@
 import h5py
 from jaxNRSur.EIMPredictor import EIMpredictor
-from jaxNRSur.PolyPredictor import polypredictor
+from jaxNRSur.PolyPredictor import PolyPredictor
 import jax.numpy as jnp
-import jax
 import equinox as eqx
 from jaxtyping import Array, Float
 
@@ -137,9 +136,14 @@ class NRSur7dq4DataLoader(eqx.Module):
     diff_t_ds: Float[Array, " n_dynam-1"]
     modes_plus: list[dict]
     modes_minus: list[dict]
-    basis_nodes_max: int
-    coorb: dict
-    coorb_nodes_max: int
+    coorb: list[PolyPredictor]
+
+    @property
+    def coorb_nmax(self) -> int:
+        return self.coorb[0].n_max
+
+    # @property
+    # def basis_name(self) -> int:
 
     def __init__(
         self,
@@ -164,49 +168,29 @@ class NRSur7dq4DataLoader(eqx.Module):
         self.t_ds = jnp.array(data["t_ds"])
         self.diff_t_ds = jnp.diff(self.t_ds)
 
-        # TODO needing to do this twice is not efficient but it doesn't really
-        # matter as it's in the loading step
-        modes_plus = []
-        modes_minus = []
-        for i in range(len(modelist)):
-            modes_plus.append(self.read_single_mode(data, modelist[i], n_max=0))
-            modes_minus.append(self.read_single_mode(data, modelist[i], n_max=0))
-
-        a = eqx.partition(
-            modes_plus + modes_minus,
-            lambda x: isinstance(x, polypredictor),
-            is_leaf=lambda x: isinstance(x, polypredictor),
-        )
-        c = jax.tree_util.tree_map(
-            lambda x: x.n_nodes, a[0], is_leaf=lambda x: isinstance(x, polypredictor)
-        )
-        list_basis_nodes = jax.tree_util.tree_leaves(c)
-        self.basis_nodes_max = int(max(list_basis_nodes))
+        coorb_nmax = -100
+        basis_nmax = -100
+        for key in data:
+            if key.startswith("ds_node"):
+                for coorb_key in data[key]:
+                    coorb_nmax = max(coorb_nmax, data[key][coorb_key].shape[0])
+            if key.startswith("hCoorb"):
+                for coorb_key in data[key]["nodeModelers"]:
+                    coorb_nmax = max(
+                        coorb_nmax, data[key]["nodeModelers"][coorb_key].shape[0]
+                    )
 
         self.modes_plus = []
         self.modes_minus = []
         for i in range(len(modelist)):
             self.modes_plus.append(
-                self.read_single_mode(data, modelist[i], n_max=self.basis_nodes_max)
+                self.read_single_mode(data, modelist[i], n_max=basis_nmax)
             )
             self.modes_minus.append(
-                self.read_single_mode(data, modelist[i], n_max=self.basis_nodes_max)
+                self.read_single_mode(data, modelist[i], n_max=basis_nmax)
             )
 
-        # Setting up the coorbital polyfit
-        coorb = self.read_coorb(data, 0)
-        a = eqx.partition(
-            [i for j in list(coorb.values()) for i in list(j.values())],
-            lambda x: isinstance(x, polypredictor),
-            is_leaf=lambda x: isinstance(x, polypredictor),
-        )
-        c = jax.tree_util.tree_map(
-            lambda x: x.n_nodes, a[0], is_leaf=lambda x: isinstance(x, polypredictor)
-        )
-        list_coorb_nodes = jax.tree_util.tree_leaves(c)
-
-        self.coorb_nodes_max = int(max(list_coorb_nodes))
-        self.coorb = self.read_coorb(data, self.coorb_nodes_max)
+        self.coorb = self.read_coorb(data, coorb_nmax)
 
     def read_mode_function(self, node_data: dict, n_max: int) -> dict:
         result = {}
@@ -218,7 +202,7 @@ class NRSur7dq4DataLoader(eqx.Module):
             coefs = jnp.array(node_data["nodeModelers"][f"coefs_{count}"])
             bfOrders = jnp.array(node_data["nodeModelers"][f"bfOrders_{count}"])
 
-            node_predictor = polypredictor(coefs, bfOrders, n_max)
+            node_predictor = PolyPredictor(coefs, bfOrders, n_max)
             predictors.append(node_predictor)
 
         result["predictors"] = predictors
@@ -254,8 +238,8 @@ class NRSur7dq4DataLoader(eqx.Module):
 
         return result
 
-    def read_coorb(self, file: dict, n_max: int) -> dict:
-        result = {}
+    def read_coorb(self, file: dict, n_max: int) -> list[PolyPredictor]:
+        result = []
 
         tags = [
             "chiA_0",
@@ -269,14 +253,20 @@ class NRSur7dq4DataLoader(eqx.Module):
             "omega_orb_1",
         ]
 
+        @eqx.filter_vmap
+        def make_polypredictor(coefs, bfOrders):
+            return PolyPredictor(coefs, bfOrders, n_max)
+
         for i in range(len(self.t_ds)):
-            result[f"ds_node_{i}"] = {}
+            coefs = []
+            bfOrders = []
 
             for tag in tags:
-                result[f"ds_node_{i}"][f"{tag}_predictors"] = polypredictor(
-                    file[f"ds_node_{i}"][f"{tag}_coefs"],
-                    file[f"ds_node_{i}"][f"{tag}_bfOrders"],
-                    n_max,
-                )
+                coef = file[f"ds_node_{i}"][f"{tag}_coefs"]
+                bfOrder = file[f"ds_node_{i}"][f"{tag}_bfOrders"]
+                coefs.append(jnp.pad(coef, (0, n_max - len(coef))))
+                bfOrders.append(jnp.pad(bfOrder, ((0, n_max - len(bfOrder)), (0, 0))))
+
+            result.append(make_polypredictor(jnp.array(coefs), jnp.array(bfOrders)))
 
         return result
