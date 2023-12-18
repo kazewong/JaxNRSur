@@ -1,6 +1,6 @@
 import h5py
 from jaxNRSur.EIMPredictor import EIMpredictor
-from jaxNRSur.PolyPredictor import PolyPredictor
+from jaxNRSur.PolyPredictor import PolyPredictor, make_polypredictor_ensemble
 import jax.numpy as jnp
 import equinox as eqx
 from jaxtyping import Array, Float
@@ -197,10 +197,6 @@ class NRSur7dq4DataLoader(eqx.Module):
         n_nodes = len(node_data["nodeIndices"])  # type: ignore
         result["n_nodes"] = n_nodes
 
-        @eqx.filter_vmap
-        def make_polypredictor(coefs, bfOrders):
-            return PolyPredictor(coefs, bfOrders, n_max)
-
         coefs = []
         bfOrders = []
 
@@ -211,7 +207,9 @@ class NRSur7dq4DataLoader(eqx.Module):
             coefs.append(jnp.pad(coef, (0, n_max - len(coef))))
             bfOrders.append(jnp.pad(bfOrder, ((0, n_max - len(bfOrder)), (0, 0))))
 
-        result["predictors"] = make_polypredictor(jnp.array(coefs), jnp.array(bfOrders))
+        result["predictors"] = make_polypredictor_ensemble(
+            jnp.array(coefs), jnp.array(bfOrders), n_max
+        )
         result["eim_basis"] = jnp.array(node_data["EIBasis"])
         return result
 
@@ -259,10 +257,6 @@ class NRSur7dq4DataLoader(eqx.Module):
             "omega_orb_1",
         ]
 
-        @eqx.filter_vmap
-        def make_polypredictor(coefs, bfOrders):
-            return PolyPredictor(coefs, bfOrders, n_max)
-
         for i in range(len(self.t_ds)):
             coefs = []
             bfOrders = []
@@ -273,6 +267,10 @@ class NRSur7dq4DataLoader(eqx.Module):
                 coefs.append(jnp.pad(coef, (0, n_max - len(coef))))
                 bfOrders.append(jnp.pad(bfOrder, ((0, n_max - len(bfOrder)), (0, 0))))
 
-            result.append(make_polypredictor(jnp.array(coefs), jnp.array(bfOrders)))
+            result.append(
+                make_polypredictor_ensemble(
+                    jnp.array(coefs), jnp.array(bfOrders), n_max
+                )
+            )
 
         return result
