@@ -178,6 +178,7 @@ class NRSur7dq4Model(eqx.Module):
     data: NRSur7dq4DataLoader
     harmonics: list[SpinWeightedSphericalHarmonics]
     negative_harmonics: list[SpinWeightedSphericalHarmonics]
+    modelist_dict: dict
 
     def __init__(
         self,
@@ -200,6 +201,11 @@ class NRSur7dq4Model(eqx.Module):
         self.data = NRSur7dq4DataLoader(data_path, modelist=modelist)
         self.harmonics = []
         self.negative_harmonics = []
+
+        self.modelist_dict = {}
+        for i in range(len(modelist)):
+            self.modelist_dict[modelist[i]] = i
+
         for mode in modelist:
             self.harmonics.append(SpinWeightedSphericalHarmonics(-2, mode[0], mode[1]))
             self.negative_harmonics.append(
@@ -211,48 +217,48 @@ class NRSur7dq4Model(eqx.Module):
     ) -> Float[Array, " n_dim"]:
         # First construct array for coorbital frame
         # borrowing notation from gwsurrogate
-        coorb_x = jnp.zeros(7)
+        coorb_x = jnp.zeros((Omega.shape[0], 7))
 
-        sp = jnp.sin(Omega[4])
-        cp = jnp.cos(Omega[4])
+        sp = jnp.sin(Omega[:, 4])
+        cp = jnp.cos(Omega[:, 4])
 
-        coorb_x = coorb_x.at[0].set(q)
-        coorb_x = coorb_x.at[1].set(Omega[5] * cp + Omega[6] * sp)
-        coorb_x = coorb_x.at[2].set(-Omega[5] * sp + Omega[6] * cp)
-        coorb_x = coorb_x.at[3].set(Omega[7])
+        coorb_x = coorb_x.at[:, 0].set(q)
+        coorb_x = coorb_x.at[:, 1].set(Omega[:, 5] * cp + Omega[:, 6] * sp)
+        coorb_x = coorb_x.at[:, 2].set(-Omega[:, 5] * sp + Omega[:, 6] * cp)
+        coorb_x = coorb_x.at[:, 3].set(Omega[:, 7])
 
-        coorb_x = coorb_x.at[4].set(Omega[8] * cp + Omega[9] * sp)
-        coorb_x = coorb_x.at[5].set(-Omega[8] * sp + Omega[9] * cp)
-        coorb_x = coorb_x.at[6].set(Omega[10])
+        coorb_x = coorb_x.at[:, 4].set(Omega[:, 8] * cp + Omega[:, 9] * sp)
+        coorb_x = coorb_x.at[:, 5].set(-Omega[:, 8] * sp + Omega[:, 9] * cp)
+        coorb_x = coorb_x.at[:, 6].set(Omega[:, 10])
 
         return coorb_x
 
     def _get_fit_params(self, x: Float[Array, " n_dim"]) -> Float[Array, " n_dim"]:
         # Generate fit params
-        fit_params = jnp.zeros(7)
+        fit_params = jnp.zeros(x.shape)
 
-        q = x[0]
+        q = x[:, 0]
         eta = q / (1 + q) ** 2
-        chi_wtAvg = (q * x[3] + x[6]) / (1 + q)
-        chi_hat = (chi_wtAvg - 38.0 * eta / 113.0 * (x[3] + x[6])) / (
+        chi_wtAvg = (q * x[:, 3] + x[:, 6]) / (1 + q)
+        chi_hat = (chi_wtAvg - 38.0 * eta / 113.0 * (x[:, 3] + x[:, 6])) / (
             1.0 - 76.0 * eta / 113.0
         )
 
-        chi_a = (x[3] - x[6]) / 2
+        chi_a = (x[:, 3] - x[:, 6]) / 2
 
-        fit_params = fit_params.at[0].set(jnp.log(q))
-        fit_params = fit_params.at[1:3].set(x[1:3])
-        fit_params = fit_params.at[3].set(chi_hat)
-        fit_params = fit_params.at[4:6].set(x[4:6])
-        fit_params = fit_params.at[6].set(chi_a)
+        fit_params = fit_params.at[:, 0].set(jnp.log(q))
+        fit_params = fit_params.at[:, 1:3].set(x[:, 1:3])
+        fit_params = fit_params.at[:, 3].set(chi_hat)
+        fit_params = fit_params.at[:, 4:6].set(x[:, 4:6])
+        fit_params = fit_params.at[:, 6].set(chi_a)
 
         return fit_params
 
     def get_Omega_derivative_from_index(
         self, i: Int, q: float, Omega_i: Float[Array, " n_Omega"]
     ) -> Float[Array, " n_Omega"]:
-        coorb_x = self._get_coorb_params(q, Omega_i)
-        fit_params = self._get_fit_params(coorb_x)[:, jnp.newaxis]
+        coorb_x = self._get_coorb_params(q, Omega_i[jnp.newaxis, :])
+        fit_params = self._get_fit_params(coorb_x)
 
         omega_orb_0_fit = self.data.coorb[f"ds_node_{i}"]["omega_orb_0_predictors"](
             fit_params
@@ -328,6 +334,63 @@ class NRSur7dq4Model(eqx.Module):
 
         return Omega_normed
 
+    def construct_hlm_from_bases(self, lambdas, polypredictor_list, eim_basis, n_nodes):
+        hlm = jnp.zeros(len(self.data.t_coorb))
+
+        for i in range(n_nodes):
+            hlm = hlm.at[:].set(hlm + polypredictor_list[i](lambdas.T) * eim_basis[i])
+
+        return hlm
+
+    def get_coorb_hlm(self, lambdas, mode=(2, 2)):
+        # TODO bad if statement...
+
+        idx = self.modelist_dict[mode]
+        if mode[1] != 0:
+            h_lm_plus = self.construct_hlm_from_bases(
+                lambdas,
+                self.data.modes[idx]["real_plus"]["predictors"],
+                self.data.modes[idx]["real_plus"]["eim_basis"],
+                self.data.modes[idx]["real_plus"]["n_nodes"],
+            ) + 1j * self.construct_hlm_from_bases(
+                lambdas,
+                self.data.modes[idx]["imag_plus"]["predictors"],
+                self.data.modes[idx]["imag_plus"]["eim_basis"],
+                self.data.modes[idx]["imag_plus"]["n_nodes"],
+            )
+
+            h_lm_minus = self.construct_hlm_from_bases(
+                lambdas,
+                self.data.modes[idx]["real_minus"]["predictors"],
+                self.data.modes[idx]["real_minus"]["eim_basis"],
+                self.data.modes[idx]["real_minus"]["n_nodes"],
+            ) + 1j * self.construct_hlm_from_bases(
+                lambdas,
+                self.data.modes[idx]["imag_minus"]["predictors"],
+                self.data.modes[idx]["imag_minus"]["eim_basis"],
+                self.data.modes[idx]["imag_minus"]["n_nodes"],
+            )
+
+            h_lm = h_lm_plus + h_lm_minus
+            h_lnegm = h_lm_plus - h_lm_minus
+
+            return h_lm, h_lnegm
+
+        else:
+            h_lm = self.construct_hlm_from_bases(
+                lambdas,
+                self.data.modes[idx]["real"]["predictors"],
+                self.data.modes[idx]["real"]["eim_basis"],
+                self.data.modes[idx]["real"]["n_nodes"],
+            ) + 1j * self.construct_hlm_from_bases(
+                lambdas,
+                self.data.modes[idx]["imag"]["predictors"],
+                self.data.modes[idx]["imag"]["eim_basis"],
+                self.data.modes[idx]["imag"]["n_nodes"],
+            )
+
+            return h_lm, jnp.zeros(h_lm.shape)
+
     def get_waveform(
         self,
         time: Float[Array, " n_sample"],
@@ -358,7 +421,20 @@ class NRSur7dq4Model(eqx.Module):
                 )
             )
 
-        return Omega
+        # Interpolating to the coorbital time array
+        Omega_interp = jnp.zeros((len(self.data.t_coorb), len(Omega_0)))
+        for i in range(11):
+            Omega_interp = Omega_interp.at[:, i].set(
+                CubicSpline(self.data.t_ds, Omega[:, i])(self.data.t_coorb)
+            )
+
+        # Get the lambda parameters to go into the waveform calculation
+        lambdas = self._get_fit_params(self._get_coorb_params(q, Omega_interp))
+
+        # Testing
+        coorb_h22, coorb_h2m2 = self.get_coorb_hlm(lambdas)
+
+        return coorb_h22
 
         # coeff = jnp.stack(jnp.array(self.get_multi_real_imag(self.mode_no22, params)))
         # modes = eqx.filter_vmap(self.get_mode, in_axes=(0, 0, None))(

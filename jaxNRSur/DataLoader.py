@@ -135,8 +135,7 @@ class NRSur7dq4DataLoader(eqx.Module):
     t_coorb: Float[Array, " n_sample"]
     t_ds: Float[Array, " n_dynam"]
     diff_t_ds: Float[Array, " n_dynam-1"]
-    modes_plus: list[dict]
-    modes_minus: list[dict]
+    modes: list[dict]
     basis_nodes_max: int
     coorb: dict
     coorb_nodes_max: int
@@ -166,14 +165,12 @@ class NRSur7dq4DataLoader(eqx.Module):
 
         # TODO needing to do this twice is not efficient but it doesn't really
         # matter as it's in the loading step
-        modes_plus = []
-        modes_minus = []
+        modes = []
         for i in range(len(modelist)):
-            modes_plus.append(self.read_single_mode(data, modelist[i], n_max=0))
-            modes_minus.append(self.read_single_mode(data, modelist[i], n_max=0))
+            modes.append(self.read_single_mode(data, modelist[i], n_max=0))
 
         a = eqx.partition(
-            modes_plus + modes_minus,
+            modes,
             lambda x: isinstance(x, polypredictor),
             is_leaf=lambda x: isinstance(x, polypredictor),
         )
@@ -183,13 +180,9 @@ class NRSur7dq4DataLoader(eqx.Module):
         list_basis_nodes = jax.tree_util.tree_leaves(c)
         self.basis_nodes_max = int(max(list_basis_nodes))
 
-        self.modes_plus = []
-        self.modes_minus = []
+        self.modes = []
         for i in range(len(modelist)):
-            self.modes_plus.append(
-                self.read_single_mode(data, modelist[i], n_max=self.basis_nodes_max)
-            )
-            self.modes_minus.append(
+            self.modes.append(
                 self.read_single_mode(data, modelist[i], n_max=self.basis_nodes_max)
             )
 
