@@ -136,11 +136,11 @@ class NRSur7dq4DataLoader(eqx.Module):
     diff_t_ds: Float[Array, " n_dynam-1"]
     modes_plus: list[dict]
     modes_minus: list[dict]
-    coorb: list[PolyPredictor]
+    coorb: PolyPredictor
 
     @property
     def coorb_nmax(self) -> int:
-        return self.coorb[0].n_max
+        return self.coorb.n_max
 
     # @property
     # def basis_name(self) -> int:
@@ -242,7 +242,7 @@ class NRSur7dq4DataLoader(eqx.Module):
 
         return result
 
-    def read_coorb(self, file: dict, n_max: int) -> list[PolyPredictor]:
+    def read_coorb(self, file: dict, n_max: int) -> PolyPredictor:
         result = []
 
         tags = [
@@ -257,20 +257,32 @@ class NRSur7dq4DataLoader(eqx.Module):
             "omega_orb_1",
         ]
 
-        for i in range(len(self.t_ds)):
-            coefs = []
-            bfOrders = []
+        @eqx.filter_vmap(in_axes=(0, 0))
+        def combine_poly_predictors(
+            coefs: jnp.ndarray, bfOrders: jnp.ndarray
+        ) -> PolyPredictor:
+            return make_polypredictor_ensemble(coefs, bfOrders, n_max)
+
+        coefs = []
+        bfOrders = []
+
+        for i in range(len(self.t_ds) - 1):
+            local_coefs = []
+            local_bfOrders = []
 
             for tag in tags:
                 coef = file[f"ds_node_{i}"][f"{tag}_coefs"]
                 bfOrder = file[f"ds_node_{i}"][f"{tag}_bfOrders"]
-                coefs.append(jnp.pad(coef, (0, n_max - len(coef))))
-                bfOrders.append(jnp.pad(bfOrder, ((0, n_max - len(bfOrder)), (0, 0))))
-
-            result.append(
-                make_polypredictor_ensemble(
-                    jnp.array(coefs), jnp.array(bfOrders), n_max
+                local_coefs.append(jnp.pad(coef, (0, n_max - len(coef))))
+                local_bfOrders.append(
+                    jnp.pad(bfOrder, ((0, n_max - len(bfOrder)), (0, 0)))
                 )
-            )
+
+            coefs.append(jnp.stack(local_coefs))
+            bfOrders.append(jnp.stack(local_bfOrders))
+
+        coefs = jnp.stack(coefs)
+        bfOrders = jnp.stack(bfOrders)
+        result = combine_poly_predictors(coefs, bfOrders)
 
         return result
