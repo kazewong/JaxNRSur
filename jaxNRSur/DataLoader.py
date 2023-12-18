@@ -176,8 +176,8 @@ class NRSur7dq4DataLoader(eqx.Module):
                     coorb_nmax = max(coorb_nmax, data[key][coorb_key].shape[0])
             if key.startswith("hCoorb"):
                 for coorb_key in data[key]["nodeModelers"]:
-                    coorb_nmax = max(
-                        coorb_nmax, data[key]["nodeModelers"][coorb_key].shape[0]
+                    basis_nmax = max(
+                        basis_nmax, data[key]["nodeModelers"][coorb_key].shape[0]
                     )
 
         self.modes_plus = []
@@ -197,15 +197,21 @@ class NRSur7dq4DataLoader(eqx.Module):
         n_nodes = len(node_data["nodeIndices"])  # type: ignore
         result["n_nodes"] = n_nodes
 
-        predictors = []
+        @eqx.filter_vmap
+        def make_polypredictor(coefs, bfOrders):
+            return PolyPredictor(coefs, bfOrders, n_max)
+
+        coefs = []
+        bfOrders = []
+
         for count in range(n_nodes):  # n_nodes is the n which you iterate over
-            coefs = jnp.array(node_data["nodeModelers"][f"coefs_{count}"])
-            bfOrders = jnp.array(node_data["nodeModelers"][f"bfOrders_{count}"])
+            coef = node_data["nodeModelers"][f"coefs_{count}"]
+            bfOrder = node_data["nodeModelers"][f"bfOrders_{count}"]
 
-            node_predictor = PolyPredictor(coefs, bfOrders, n_max)
-            predictors.append(node_predictor)
+            coefs.append(jnp.pad(coef, (0, n_max - len(coef))))
+            bfOrders.append(jnp.pad(bfOrder, ((0, n_max - len(bfOrder)), (0, 0))))
 
-        result["predictors"] = predictors
+        result["predictors"] = make_polypredictor(jnp.array(coefs), jnp.array(bfOrders))
         result["eim_basis"] = jnp.array(node_data["EIBasis"])
         return result
 
