@@ -1,9 +1,9 @@
 import jax.numpy as jnp
-from jaxtyping import Array, Float, Int
+from jaxtyping import Array, Float, Int, jaxtyped
 import equinox as eqx
 
 
-class polypredictor(eqx.Module):
+class PolyPredictor(eqx.Module):
     coefs: Float[Array, " n_sum"]
     bfOrders: Float[Array, " n_sum n_lambda"]
     n_max: Int
@@ -24,18 +24,43 @@ class polypredictor(eqx.Module):
         self.coefs = self.coefs.at[:n_node].set(coefs)
         self.bfOrders = self.bfOrders.at[:n_node].set(bfOrders)
 
+    @jaxtyped
+    @staticmethod
+    def predict(
+        inputs: Float[Array, " n_lambda n_sample"],
+        coefs: Float[Array, " n_sum"],
+        bfOrders: Float[Array, " n_sum n_lambda"],
+    ):
+        return jnp.dot(
+            coefs,
+            jnp.prod(
+                jnp.power(inputs[jnp.newaxis, :, :], bfOrders[:, :, jnp.newaxis]),
+                axis=1,
+            ),
+        )[0]
+
     # TODO think about padding the arrays to allow for vmapping on the function
     def __call__(
         self, X: Float[Array, " n_lambda n_sample"]
     ) -> Float[Array, " n_sample"]:
-        return jnp.dot(
-            self.coefs,
-            jnp.prod(
-                jnp.power(X[jnp.newaxis, :, :], self.bfOrders[:, :, jnp.newaxis]),
-                axis=1,
-            ),
-        )
+        return self.predict(X, self.coefs, self.bfOrders)
 
     @property
     def n_nodes(self) -> int:
         return self.coefs.shape[0]
+
+
+@eqx.filter_vmap(in_axes=(eqx.if_array(0), None))
+def evaluate_ensemble(
+    predictors: PolyPredictor, inputs: Float[Array, " n_lambda n_sample"]
+) -> Float[Array, " n_sample"]:
+    return predictors(inputs)
+
+
+@eqx.filter_vmap(in_axes=(0, 0, None))
+def make_polypredictor_ensemble(
+    coefs: Float[Array, " n_predictor n_sum"],
+    bfOrders: Float[Array, " n_predictor n_sum n_lambda"],
+    n_max: int,
+):
+    return PolyPredictor(coefs, bfOrders, n_max)

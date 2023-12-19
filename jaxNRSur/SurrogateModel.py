@@ -3,6 +3,7 @@ import jax
 from jaxNRSur.Spline import CubicSpline
 from jaxNRSur.DataLoader import NRHybSur3dq8DataLoader, NRSur7dq4DataLoader
 from jaxNRSur.Harmonics import SpinWeightedSphericalHarmonics
+from jaxNRSur.PolyPredictor import PolyPredictor, evaluate_ensemble
 from jaxtyping import Array, Float, Int
 import equinox as eqx
 
@@ -255,26 +256,25 @@ class NRSur7dq4Model(eqx.Module):
         return fit_params
 
     def get_Omega_derivative_from_index(
-        self, i: Int, q: float, Omega_i: Float[Array, " n_Omega"]
+        self,
+        Omega_i: Float[Array, " n_Omega"],
+        q: Float,
+        predictor: PolyPredictor,
     ) -> Float[Array, " n_Omega"]:
         coorb_x = self._get_coorb_params(q, Omega_i[jnp.newaxis, :])
         fit_params = self._get_fit_params(coorb_x)
 
-        omega_orb_0_fit = self.data.coorb[f"ds_node_{i}"]["omega_orb_0_predictors"](
-            fit_params
-        )[0]
-        omega_orb_1_fit = self.data.coorb[f"ds_node_{i}"]["omega_orb_1_predictors"](
-            fit_params
-        )[0]
-        omega_fit = self.data.coorb[f"ds_node_{i}"]["omega_predictors"](fit_params)[0]
-
-        chiA_0_fit = self.data.coorb[f"ds_node_{i}"]["chiA_0_predictors"](fit_params)[0]
-        chiA_1_fit = self.data.coorb[f"ds_node_{i}"]["chiA_1_predictors"](fit_params)[0]
-        chiA_2_fit = self.data.coorb[f"ds_node_{i}"]["chiA_2_predictors"](fit_params)[0]
-
-        chiB_0_fit = self.data.coorb[f"ds_node_{i}"]["chiB_0_predictors"](fit_params)[0]
-        chiB_1_fit = self.data.coorb[f"ds_node_{i}"]["chiB_1_predictors"](fit_params)[0]
-        chiB_2_fit = self.data.coorb[f"ds_node_{i}"]["chiB_2_predictors"](fit_params)[0]
+        (
+            omega_orb_0_fit,
+            omega_orb_1_fit,
+            omega_fit,
+            chiA_0_fit,
+            chiA_1_fit,
+            chiA_2_fit,
+            chiB_0_fit,
+            chiB_1_fit,
+            chiB_2_fit,
+        ) = evaluate_ensemble(predictor, fit_params)
 
         # Converting to dOmega_dt array
         dOmega_dt = jnp.zeros(len(Omega_i))
@@ -314,10 +314,14 @@ class NRSur7dq4Model(eqx.Module):
         return dOmega_dt
 
     def forward_euler(
-        self, timestep: Int, q: float, Omega_i: Float[Array, " n_Omega"]
+        self,
+        q: Float,
+        Omega_i: Float[Array, " n_Omega"],
+        predictor: PolyPredictor,
+        dt: Float,
     ) -> Float[Array, " n_Omega"]:
-        dOmega_dt = self.get_Omega_derivative_from_index(timestep, q, Omega_i)
-        return Omega_i + dOmega_dt * self.data.diff_t_ds[timestep]
+        dOmega_dt = self.get_Omega_derivative_from_index(Omega_i, q, predictor)
+        return Omega_i + dOmega_dt * dt
 
     def normalize_Omega(
         self, Omega: Float[Array, " n_Omega"], normA: float, normB: float
@@ -397,15 +401,15 @@ class NRSur7dq4Model(eqx.Module):
         params: Float[Array, " n_dim"],
         theta: float = 0.0,
         phi: float = 0.0,
-        init_quat: Float[Array, " n_quat"] = jnp.array([1, 0, 0, 0]),
-        init_orb_phase: float = 0,
+        init_quat: Float[Array, " n_quat"] = jnp.array([1.0, 0.0, 0.0, 0.0]),
+        init_orb_phase: float = 0.0,
     ) -> Float[Array, " n_sample"]:
         # TODO set up the appropriate t_low etc
 
         # Initialize Omega with structure:
         # Omega = [Quaterion, Orb phase, spin_1, spin_2]
         # Note that the spins are in the coprecessing frame
-        q = float(params[0])
+        q = params[0]
         Omega_0 = jnp.concatenate([init_quat, jnp.array([init_orb_phase]), params[1:]])
         Omega = jnp.zeros((len(self.data.t_ds), len(Omega_0)))
         Omega = Omega.at[0, :].set(Omega_0)
@@ -413,13 +417,29 @@ class NRSur7dq4Model(eqx.Module):
         normA = jnp.linalg.norm(params[1:4])
         normB = jnp.linalg.norm(params[4:7])
 
-        # integral timestepper
-        for timestep in range(len(self.data.t_ds) - 1):
-            Omega = Omega.at[timestep + 1, :].set(
-                self.normalize_Omega(
-                    self.forward_euler(timestep, q, Omega[timestep, :]), normA, normB
-                )
+        init_state = (Omega_0, q, normA, normB)
+
+        predictors_paramters, n_max = eqx.partition(self.data.coorb, eqx.is_array)
+        dt = self.data.diff_t_ds
+
+        extras = (predictors_paramters, dt)
+
+        def timestepping_kernel(
+            carry: tuple[Float[Array, " n_Omega"], Float, Float, Float], data
+        ) -> tuple[
+            tuple[Float[Array, " n_Omega"], Float, Float, Float],
+            Float[Array, " n_Omega"],
+        ]:
+            Omega, q, normA, normB = carry
+            predictors_paramters, dt = data
+            predictor = eqx.combine(predictors_paramters, n_max)
+            Omega = self.normalize_Omega(
+                self.forward_euler(q, Omega, predictor, dt), normA, normB
             )
+            return (Omega, q, normA, normB), Omega
+
+        # integral timestepper
+        state, Omega = jax.lax.scan(timestepping_kernel, init_state, extras)
 
         # Interpolating to the coorbital time array
         Omega_interp = jnp.zeros((len(self.data.t_coorb), len(Omega_0)))
