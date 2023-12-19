@@ -134,6 +134,7 @@ class NRSur7dq4DataLoader(eqx.Module):
     t_coorb: Float[Array, " n_sample"]
     t_ds: Float[Array, " n_dynam"]
     diff_t_ds: Float[Array, " n_dynam-1"]
+
     modes_plus: list[dict]
     modes_minus: list[dict]
     coorb: PolyPredictor
@@ -141,10 +142,6 @@ class NRSur7dq4DataLoader(eqx.Module):
     @property
     def coorb_nmax(self) -> int:
         return self.coorb.n_max
-
-    # @property
-    # def basis_name(self) -> int:
-
     def __init__(
         self,
         path: str,
@@ -168,6 +165,7 @@ class NRSur7dq4DataLoader(eqx.Module):
         self.t_ds = jnp.array(data["t_ds"])
         self.diff_t_ds = jnp.diff(self.t_ds)
 
+
         coorb_nmax = -100
         basis_nmax = -100
         for key in data:
@@ -180,8 +178,7 @@ class NRSur7dq4DataLoader(eqx.Module):
                         basis_nmax, data[key]["nodeModelers"][coorb_key].shape[0]
                     )
 
-        self.modes_plus = []
-        self.modes_minus = []
+        self.modes = []
         for i in range(len(modelist)):
             self.modes_plus.append(
                 self.read_single_mode(data, modelist[i], n_max=basis_nmax)
