@@ -1,6 +1,8 @@
 import h5py
 from jaxNRSur.EIMPredictor import EIMpredictor
+from jaxNRSur.PolyPredictor import polypredictor
 import jax.numpy as jnp
+import jax
 import equinox as eqx
 from jaxtyping import Array, Float
 
@@ -32,8 +34,8 @@ def h5Group_to_dict(h5_group: h5py.Group) -> dict:
     return result
 
 
-class SurrogateDataLoader(eqx.Module):
-    sur_time: Float[Array, str("n_sample")]
+class NRHybSur3dq8DataLoader(eqx.Module):
+    sur_time: Float[Array, " n_sample"]
     modes: list[dict]
 
     def __init__(
@@ -126,4 +128,183 @@ class SurrogateDataLoader(eqx.Module):
                         "re", local_function["eim_basis"].shape[1]
                     )
         result["mode"] = mode
+        return result
+
+
+class NRSur7dq4DataLoader(eqx.Module):
+    t_coorb: Float[Array, " n_sample"]
+    t_ds: Float[Array, " n_dynam"]
+    diff_t_ds: Float[Array, " n_dynam-1"]
+    modes: list[dict]
+    basis_nodes_max: int
+    coorb: dict
+    coorb_nodes_max: int
+
+    def __init__(
+        self,
+        path: str,
+        modelist: list[tuple[int, int]] = [
+            (2, 0),
+            (2, 1),
+            (2, 2),
+            (3, 0),
+            (3, 1),
+            (3, 2),
+            (3, 3),
+            (4, 0),
+            (4, 1),
+            (4, 2),
+            (4, 3),
+            (4, 4),
+        ],
+    ) -> None:
+        data = h5Group_to_dict(h5py.File(path, "r"))
+        self.t_coorb = jnp.array(data["t_coorb"])
+        self.t_ds = jnp.array(data["t_ds"])
+        self.diff_t_ds = jnp.diff(self.t_ds)
+
+        # TODO needing to do this twice is not efficient but it doesn't really
+        # matter as it's in the loading step
+        modes = []
+        for i in range(len(modelist)):
+            modes.append(self.read_single_mode(data, modelist[i], n_max=0))
+
+        a = eqx.partition(
+            modes,
+            lambda x: isinstance(x, polypredictor),
+            is_leaf=lambda x: isinstance(x, polypredictor),
+        )
+        c = jax.tree_util.tree_map(
+            lambda x: x.n_nodes, a[0], is_leaf=lambda x: isinstance(x, polypredictor)
+        )
+        list_basis_nodes = jax.tree_util.tree_leaves(c)
+        self.basis_nodes_max = int(max(list_basis_nodes))
+
+        self.modes = []
+        for i in range(len(modelist)):
+            self.modes.append(
+                self.read_single_mode(data, modelist[i], n_max=self.basis_nodes_max)
+            )
+
+        # Setting up the coorbital polyfit
+        coorb = self.read_coorb(data, 0)
+        a = eqx.partition(
+            [i for j in list(coorb.values()) for i in list(j.values())],
+            lambda x: isinstance(x, polypredictor),
+            is_leaf=lambda x: isinstance(x, polypredictor),
+        )
+        c = jax.tree_util.tree_map(
+            lambda x: x.n_nodes, a[0], is_leaf=lambda x: isinstance(x, polypredictor)
+        )
+        list_coorb_nodes = jax.tree_util.tree_leaves(c)
+
+        self.coorb_nodes_max = int(max(list_coorb_nodes))
+        self.coorb = self.read_coorb(data, self.coorb_nodes_max)
+
+    def read_mode_function(self, node_data: dict, n_max: int) -> dict:
+        result = {}
+        n_nodes = len(node_data["nodeIndices"])  # type: ignore
+        result["n_nodes"] = n_nodes
+
+        predictors = []
+        for count in range(n_nodes):  # n_nodes is the n which you iterate over
+            coefs = jnp.array(node_data["nodeModelers"][f"coefs_{count}"])
+            bfOrders = jnp.array(node_data["nodeModelers"][f"bfOrders_{count}"])
+
+            node_predictor = polypredictor(coefs, bfOrders, n_max)
+            predictors.append(node_predictor)
+
+        result["predictors"] = predictors
+        result["eim_basis"] = jnp.array(node_data["EIBasis"])
+        return result
+
+    def read_single_mode(self, file: dict, mode: tuple[int, int], n_max: int) -> dict:
+        result = {}
+        if mode[1] != 0:
+            result["real_plus"] = self.read_mode_function(
+                file[f"hCoorb_{mode[0]}_{mode[1]}_Re+"], n_max
+            )
+            result["imag_plus"] = self.read_mode_function(
+                file[f"hCoorb_{mode[0]}_{mode[1]}_Im+"], n_max
+            )
+
+            result["real_minus"] = self.read_mode_function(
+                file[f"hCoorb_{mode[0]}_{mode[1]}_Re-"], n_max
+            )
+            result["imag_minus"] = self.read_mode_function(
+                file[f"hCoorb_{mode[0]}_{mode[1]}_Im-"], n_max
+            )
+
+        else:
+            result["real"] = self.read_mode_function(
+                file[f"hCoorb_{mode[0]}_{mode[1]}_real"], n_max
+            )
+            result["imag"] = self.read_mode_function(
+                file[f"hCoorb_{mode[0]}_{mode[1]}_imag"], n_max
+            )
+
+        result["mode"] = mode
+
+        return result
+
+    def read_coorb(self, file: dict, n_max: int) -> dict:
+        result = {}
+
+        for i in range(len(self.t_ds)):
+            result[f"ds_node_{i}"] = {}
+
+            result[f"ds_node_{i}"]["chiA_0_predictors"] = polypredictor(
+                file[f"ds_node_{i}"]["chiA_0_coefs"],
+                file[f"ds_node_{i}"]["chiA_0_bfOrders"],
+                n_max,
+            )
+
+            result[f"ds_node_{i}"]["chiA_1_predictors"] = polypredictor(
+                file[f"ds_node_{i}"]["chiA_1_coefs"],
+                file[f"ds_node_{i}"]["chiA_1_bfOrders"],
+                n_max,
+            )
+
+            result[f"ds_node_{i}"]["chiA_2_predictors"] = polypredictor(
+                file[f"ds_node_{i}"]["chiA_2_coefs"],
+                file[f"ds_node_{i}"]["chiA_2_bfOrders"],
+                n_max,
+            )
+
+            result[f"ds_node_{i}"]["chiB_0_predictors"] = polypredictor(
+                file[f"ds_node_{i}"]["chiB_0_coefs"],
+                file[f"ds_node_{i}"]["chiB_0_bfOrders"],
+                n_max,
+            )
+
+            result[f"ds_node_{i}"]["chiB_1_predictors"] = polypredictor(
+                file[f"ds_node_{i}"]["chiB_1_coefs"],
+                file[f"ds_node_{i}"]["chiB_1_bfOrders"],
+                n_max,
+            )
+
+            result[f"ds_node_{i}"]["chiB_2_predictors"] = polypredictor(
+                file[f"ds_node_{i}"]["chiB_2_coefs"],
+                file[f"ds_node_{i}"]["chiB_2_bfOrders"],
+                n_max,
+            )
+
+            result[f"ds_node_{i}"]["omega_predictors"] = polypredictor(
+                file[f"ds_node_{i}"]["omega_coefs"],
+                file[f"ds_node_{i}"]["omega_bfOrders"],
+                n_max,
+            )
+
+            result[f"ds_node_{i}"]["omega_orb_0_predictors"] = polypredictor(
+                file[f"ds_node_{i}"]["omega_orb_0_coefs"],
+                file[f"ds_node_{i}"]["omega_orb_0_bfOrders"],
+                n_max,
+            )
+
+            result[f"ds_node_{i}"]["omega_orb_1_predictors"] = polypredictor(
+                file[f"ds_node_{i}"]["omega_orb_1_coefs"],
+                file[f"ds_node_{i}"]["omega_orb_1_bfOrders"],
+                n_max,
+            )
+
         return result

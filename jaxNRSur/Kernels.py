@@ -10,8 +10,8 @@ class Kernel(eqx.Module):
 
     @abstractmethod
     def __call__(
-        self, X: Float[Array, str("n_sample")], Y: Float[Array, str("n_sample")]
-    ) -> Float[Array, str("n_sample")]:
+        self, X: Float[Array, " n_sample"], Y: Float[Array, " n_sample"]
+    ) -> Float[Array, " n_sample"]:
         """
         We currently support case when both arguments are supplied
         """
@@ -27,8 +27,8 @@ class SumKernel(Kernel):
         self.k2 = k2
 
     def __call__(
-        self, X: Float[Array, str("n_sample")], Y: Float[Array, str("n_sample")]
-    ) -> Float[Array, str("n_sample")]:
+        self, X: Float[Array, " n_sample"], Y: Float[Array, " n_sample"]
+    ) -> Float[Array, " n_sample"]:
         return self.k1(X, Y) + self.k2(X, Y)
 
 
@@ -42,8 +42,8 @@ class ProductKernel(Kernel):
         self.k2 = k2
 
     def __call__(
-        self, X: Float[Array, str("n_sample")], Y: Float[Array, str("n_sample")]
-    ) -> Float[Array, str("n_sample")]:
+        self, X: Float[Array, " n_sample"], Y: Float[Array, " n_sample"]
+    ) -> Float[Array, " n_sample"]:
         return self.k1(X, Y) * self.k2(X, Y)
 
 
@@ -76,8 +76,8 @@ class ConstantKernel(Kernel):
             print("update y_dims")
 
     def __call__(
-        self, X: Float[Array, str("n_sample")], Y: Float[Array, str("n_sample")]
-    ) -> Float[Array, str("n_sample")]:
+        self, X: Float[Array, " n_sample"], Y: Float[Array, " n_sample"]
+    ) -> Float[Array, " n_sample"]:
         return jnp.full((self.x_dims, self.y_dims), self.constant_value)
 
 
@@ -110,14 +110,14 @@ class WhiteKernel(Kernel):
             print("update y_dims")
 
     def __call__(
-        self, X: Float[Array, str("n_sample")], Y: Float[Array, str("n_sample")]
-    ) -> Float[Array, str("n_sample")]:
+        self, X: Float[Array, " n_sample"], Y: Float[Array, " n_sample"]
+    ) -> Float[Array, " n_sample"]:
         return jnp.zeros((self.x_dims, self.y_dims))
 
 
 def cdist(
-    X: Float[Array, str("n_sample")], Y: Float[Array, str("n_sample")]
-) -> Float[Array, str("n_sample")]:
+    X: Float[Array, " n_sample"], Y: Float[Array, " n_sample"]
+) -> Float[Array, " n_sample"]:
     """
     Compute square distance between two metric
     """
@@ -147,7 +147,7 @@ class RBF(Kernel):
             print("update length_scale")
 
     def __call__(
-        self, X: Float[Array, str("n_sample")], Y: Float[Array, str("n_sample")]
-    ) -> Float[Array, str("n_sample")]:
+        self, X: Float[Array, " n_sample"], Y: Float[Array, " n_sample"]
+    ) -> Float[Array, " n_sample"]:
         dists = cdist((X / self.length_scale), (Y / self.length_scale))
         return jnp.exp(-0.5 * dists)

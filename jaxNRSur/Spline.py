@@ -5,10 +5,10 @@ from jaxtyping import Float, Array
 
 
 class CubicSpline:
-    x_grid: Float[Array, str("batch")]  # input x data
-    y_grid: Float[Array, str("n")]  # input y data
+    x_grid: Float[Array, " batch"]  # input x data
+    y_grid: Float[Array, " n"]  # input y data
 
-    def __init__(self, x: Float[Array, str("n")], y: Float[Array, str("n")]) -> None:
+    def __init__(self, x: Float[Array, " n"], y: Float[Array, " n"]) -> None:
         self.x_grid = x
         self.diff_x = jnp.diff(x)
         self.y_grid = y
@@ -16,49 +16,53 @@ class CubicSpline:
         assert len(x) == len(y), "x and y must have the same length"
         self.coeff = self.build_rep(x, y)
 
-    def __call__(self, x: Float[Array, str("n")]) -> Float[Array, str("n")]:
+    def __call__(self, x: Float[Array, " n"]) -> Float[Array, " n"]:
         return self.get_value(x)
 
-    def get_value(self, x: Float[Array, str("n")]) -> Float[Array, str("n")]:
+    def get_value(self, x: Float[Array, " n"]) -> Float[Array, " n"]:
         bin = jnp.digitize(x, self.x_grid)
         result = (
-            self.coeff[bin - 1] * (self.x_grid[bin] - x) ** 3 / (6 * self.diff_x[bin-1])
+            self.coeff[bin - 1]
+            * (self.x_grid[bin] - x) ** 3
+            / (6 * self.diff_x[bin - 1])
         )
         result += (
-            self.coeff[bin] * (x - self.x_grid[bin - 1]) ** 3 / (6 * self.diff_x[bin-1])
+            self.coeff[bin]
+            * (x - self.x_grid[bin - 1]) ** 3
+            / (6 * self.diff_x[bin - 1])
         )
         result += (
-            (self.y_grid[bin - 1] - self.coeff[bin - 1] * self.diff_x[bin-1] ** 2 / 6)
-            * (self.x_grid[bin] - x) / self.diff_x[bin-1]
+            (self.y_grid[bin - 1] - self.coeff[bin - 1] * self.diff_x[bin - 1] ** 2 / 6)
+            * (self.x_grid[bin] - x)
+            / self.diff_x[bin - 1]
         )
         result += (
-            (self.y_grid[bin] - self.coeff[bin] * self.diff_x[bin-1] ** 2 / 6)
-            * (x - self.x_grid[bin - 1]) / self.diff_x[bin-1]
+            (self.y_grid[bin] - self.coeff[bin] * self.diff_x[bin - 1] ** 2 / 6)
+            * (x - self.x_grid[bin - 1])
+            / self.diff_x[bin - 1]
         )
         return result
 
-    # def get_derivative(self, x: Float[Array, str("n")]) -> Float[Array, str("n")]:
+    # def get_derivative(self, x: Float[Array, " n"]) -> Float[Array, " n"]:
     # bin = jnp.digitize(x, self.x_grid)
     # result
 
     @staticmethod
     def divided_difference(
-        x0: Float[Array, str("n")],
-        x1: Float[Array, str("n")],
-        x2: Float[Array, str("n")],
-        y0: Float[Array, str("n")],
-        y1: Float[Array, str("n")],
-        y2: Float[Array, str("n")],
-    ) -> Float[Array, str("n")]:
+        x0: Float[Array, " n"],
+        x1: Float[Array, " n"],
+        x2: Float[Array, " n"],
+        y0: Float[Array, " n"],
+        y1: Float[Array, " n"],
+        y2: Float[Array, " n"],
+    ) -> Float[Array, " n"]:
         d1 = (y1 - y0) / (x1 - x0)
         d2 = (y2 - y1) / (x2 - x1)
         return (d2 - d1) / (x2 - x0)
 
     @staticmethod
     @jax.jit
-    def build_rep(
-        x: Float[Array, str("n")], y: Float[Array, str("n")]
-    ) -> Float[Array, str("n")]:
+    def build_rep(x: Float[Array, " n"], y: Float[Array, " n"]) -> Float[Array, " n"]:
         # TODO: Revise boundary condition
 
         """

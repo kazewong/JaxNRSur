@@ -14,7 +14,7 @@ def fac(n: int):  # -> int:
 
 
 # coefficient function
-def Cslm(s: int, l_mode: int, m_mode: int) -> Float[Array, str("1")]:
+def Cslm(s: int, l_mode: int, m_mode: int) -> Float[Array, " 1"]:
     return jnp.sqrt(
         l_mode
         * l_mode
@@ -25,8 +25,8 @@ def Cslm(s: int, l_mode: int, m_mode: int) -> Float[Array, str("1")]:
 
 # recursion function
 def s_lambda_lm(
-    s_mode: int, l_mode: int, m_mode: int, theta: Float[Array, str("1")]
-) -> Float[Array, str("1")]:
+    s_mode: int, l_mode: int, m_mode: int, theta: Float[Array, " 1"]
+) -> Float[Array, " 1"]:
     Pm = pow(-0.5, m_mode)
 
     if m_mode != s_mode:
@@ -94,7 +94,7 @@ class SpinWeightedSphericalHarmonics(eqx.Module):
         self.l_mode = l_mode
         self.m_mode = m_mode
 
-    def __call__(self, theta: float, phi: float) -> Float[Array, str("1")]:
+    def __call__(self, theta: float, phi: float) -> Float[Array, " 1"]:
         result = self.Pm_coeff * s_lambda_lm(
             self.s_mode, self.l_mode, self.m_mode, jnp.cos(theta)
         )
