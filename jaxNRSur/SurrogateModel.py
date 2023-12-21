@@ -1,3 +1,4 @@
+from functools import partial
 import jax.numpy as jnp
 import jax
 from jaxNRSur.Spline import CubicSpline
@@ -389,6 +390,15 @@ class NRSur7dq4Model(eqx.Module):
 
             return h_lm, jnp.zeros(h_lm.shape)
 
+    @staticmethod
+    @partial(jax.vmap, in_axes=(None, None, 1))
+    def interp_omega(
+        time_grid: Float[Array, " n_grid"],
+        time: Float[Array, " n_sample"],
+        Omega: Float[Array, " n_Omega"],
+    ):
+        return CubicSpline(time_grid, Omega)(time)
+
     def get_waveform(
         self,
         time: Float[Array, " n_sample"],
@@ -437,10 +447,7 @@ class NRSur7dq4Model(eqx.Module):
 
         # Interpolating to the coorbital time array
         Omega_interp = jnp.zeros((len(self.data.t_coorb), len(Omega_0)))
-        for i in range(11):
-            Omega_interp = Omega_interp.at[:, i].set(
-                CubicSpline(self.data.t_ds, Omega[:, i])(self.data.t_coorb)
-            )
+        Omega_interp = self.interp_omega(self.data.t_ds, self.data.t_coorb, Omega).T
 
         # Get the lambda parameters to go into the waveform calculation
         lambdas = jax.vmap(self._get_fit_params)(
