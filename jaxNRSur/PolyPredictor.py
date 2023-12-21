@@ -37,7 +37,7 @@ class PolyPredictor(eqx.Module):
                 jnp.power(inputs[jnp.newaxis, :, :], bfOrders[:, :, jnp.newaxis]),
                 axis=1,
             ),
-        )[0]
+        )
 
     # TODO think about padding the arrays to allow for vmapping on the function
     def __call__(
@@ -53,7 +53,7 @@ class PolyPredictor(eqx.Module):
 @eqx.filter_vmap(in_axes=(eqx.if_array(0), None))
 def evaluate_ensemble(
     predictors: PolyPredictor, inputs: Float[Array, " n_lambda n_sample"]
-) -> Float[Array, " n_sample"]:
+) -> Float[Array, " n_predictor n_sample"]:
     return predictors(inputs)
 
 
