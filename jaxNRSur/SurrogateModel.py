@@ -214,7 +214,7 @@ class NRSur7dq4Model(eqx.Module):
             )
 
     def _get_coorb_params(
-        self, q: float, Omega: Float[Array, " n_Omega"]
+        self, q: Float, Omega: Float[Array, " n_Omega"]
     ) -> Float[Array, " n_dim"]:
         # First construct array for coorbital frame
         # borrowing notation from gwsurrogate
@@ -338,13 +338,13 @@ class NRSur7dq4Model(eqx.Module):
 
         return Omega_normed
 
-    def construct_hlm_from_bases(self, lambdas, polypredictor_list, eim_basis, n_nodes):
-        hlm = jnp.zeros(len(self.data.t_coorb))
-
-        for i in range(n_nodes):
-            hlm = hlm.at[:].set(hlm + polypredictor_list[i](lambdas.T) * eim_basis[i])
-
-        return hlm
+    def construct_hlm_from_bases(
+        self,
+        lambdas: Float[Array, " n_nodes"],
+        predictor: PolyPredictor,
+        eim_basis: Float[Array, " n_nodes n_sample"],
+    ) -> Float[Array, " n_sample"]:
+        return jnp.sum(evaluate_ensemble(predictor, lambdas).T @ eim_basis, axis=0)
 
     def get_coorb_hlm(self, lambdas, mode=(2, 2)):
         # TODO bad if statement...
@@ -355,24 +355,20 @@ class NRSur7dq4Model(eqx.Module):
                 lambdas,
                 self.data.modes[idx]["real_plus"]["predictors"],
                 self.data.modes[idx]["real_plus"]["eim_basis"],
-                self.data.modes[idx]["real_plus"]["n_nodes"],
             ) + 1j * self.construct_hlm_from_bases(
                 lambdas,
                 self.data.modes[idx]["imag_plus"]["predictors"],
                 self.data.modes[idx]["imag_plus"]["eim_basis"],
-                self.data.modes[idx]["imag_plus"]["n_nodes"],
             )
 
             h_lm_minus = self.construct_hlm_from_bases(
                 lambdas,
                 self.data.modes[idx]["real_minus"]["predictors"],
                 self.data.modes[idx]["real_minus"]["eim_basis"],
-                self.data.modes[idx]["real_minus"]["n_nodes"],
             ) + 1j * self.construct_hlm_from_bases(
                 lambdas,
                 self.data.modes[idx]["imag_minus"]["predictors"],
                 self.data.modes[idx]["imag_minus"]["eim_basis"],
-                self.data.modes[idx]["imag_minus"]["n_nodes"],
             )
 
             h_lm = h_lm_plus + h_lm_minus
@@ -385,12 +381,10 @@ class NRSur7dq4Model(eqx.Module):
                 lambdas,
                 self.data.modes[idx]["real"]["predictors"],
                 self.data.modes[idx]["real"]["eim_basis"],
-                self.data.modes[idx]["real"]["n_nodes"],
             ) + 1j * self.construct_hlm_from_bases(
                 lambdas,
                 self.data.modes[idx]["imag"]["predictors"],
                 self.data.modes[idx]["imag"]["eim_basis"],
-                self.data.modes[idx]["imag"]["n_nodes"],
             )
 
             return h_lm, jnp.zeros(h_lm.shape)
