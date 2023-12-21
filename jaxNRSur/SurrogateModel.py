@@ -405,8 +405,6 @@ class NRSur7dq4Model(eqx.Module):
         # Note that the spins are in the coprecessing frame
         q = params[0]
         Omega_0 = jnp.concatenate([init_quat, jnp.array([init_orb_phase]), params[1:]])
-        Omega = jnp.zeros((len(self.data.t_ds), len(Omega_0)))
-        Omega = Omega.at[0, :].set(Omega_0)
 
         normA = jnp.linalg.norm(params[1:4])
         normB = jnp.linalg.norm(params[4:7])
@@ -435,6 +433,8 @@ class NRSur7dq4Model(eqx.Module):
         # integral timestepper
         state, Omega = jax.lax.scan(timestepping_kernel, init_state, extras)
 
+        Omega = jnp.concatenate([Omega_0[None], Omega], axis=0)
+
         # Interpolating to the coorbital time array
         Omega_interp = jnp.zeros((len(self.data.t_coorb), len(Omega_0)))
         for i in range(11):
@@ -443,10 +443,12 @@ class NRSur7dq4Model(eqx.Module):
             )
 
         # Get the lambda parameters to go into the waveform calculation
-        lambdas = self._get_fit_params(self._get_coorb_params(q, Omega_interp))
+        lambdas = jax.vmap(self._get_fit_params)(
+            jax.vmap(self._get_coorb_params, in_axes=(None, 0))(q, Omega_interp)
+        )
 
         # Testing
-        coorb_h22, coorb_h2m2 = self.get_coorb_hlm(lambdas)
+        coorb_h22, coorb_h2m2 = jax.vmap(self.get_coorb_hlm)(lambdas)
 
         return coorb_h22
 

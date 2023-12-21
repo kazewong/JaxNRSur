@@ -259,7 +259,8 @@ class NRSur7dq4DataLoader(eqx.Module):
         coefs = []
         bfOrders = []
 
-        for i in range(len(self.t_ds)):
+        for i in range(len(self.t_ds) - 1):
+            # The last time step is not included in the data
             local_coefs = []
             local_bfOrders = []
 
