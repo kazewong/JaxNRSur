@@ -340,7 +340,7 @@ class NRSur7dq4Model(eqx.Module):
 
     def construct_hlm_from_bases(
         self,
-        lambdas: Float[Array, " n_nodes"],
+        lambdas: Float[Array, " n_dim"],
         predictor: PolyPredictor,
         eim_basis: Float[Array, " n_nodes n_sample"],
     ) -> Float[Array, " n_sample"]:

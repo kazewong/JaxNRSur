@@ -30,7 +30,7 @@ class PolyPredictor(eqx.Module):
         inputs: Float[Array, " n_lambda n_sample"],
         coefs: Float[Array, " n_sum"],
         bfOrders: Float[Array, " n_sum n_lambda"],
-    ):
+    ) -> Float[Array, " n_sample"]:
         return jnp.dot(
             coefs,
             jnp.prod(
