@@ -27,22 +27,20 @@ class PolyPredictor(eqx.Module):
     @jaxtyped
     @staticmethod
     def predict(
-        inputs: Float[Array, " n_lambda n_sample"],
+        inputs: Float[Array, " n_lambda"],
         coefs: Float[Array, " n_sum"],
         bfOrders: Float[Array, " n_sum n_lambda"],
-    ) -> Float[Array, " n_sample"]:
+    ) -> Float[Array, " 1"]:
+        # TODO: Check this Ethan
         return jnp.dot(
             coefs,
             jnp.prod(
-                jnp.power(inputs[jnp.newaxis, :, :], bfOrders[:, :, jnp.newaxis]),
+                jnp.power(inputs, bfOrders),
                 axis=1,
             ),
         )
 
-    # TODO think about padding the arrays to allow for vmapping on the function
-    def __call__(
-        self, X: Float[Array, " n_lambda n_sample"]
-    ) -> Float[Array, " n_sample"]:
+    def __call__(self, X: Float[Array, " n_lambda "]) -> Float[Array, " 1"]:
         return self.predict(X, self.coefs, self.bfOrders)
 
     @property
@@ -52,8 +50,8 @@ class PolyPredictor(eqx.Module):
 
 @eqx.filter_vmap(in_axes=(eqx.if_array(0), None))
 def evaluate_ensemble(
-    predictors: PolyPredictor, inputs: Float[Array, " n_lambda n_sample"]
-) -> Float[Array, " n_predictor n_sample"]:
+    predictors: PolyPredictor, inputs: Float[Array, " n_lambda"]
+) -> Float[Array, " n_predictor"]:
     return predictors(inputs)
 
 

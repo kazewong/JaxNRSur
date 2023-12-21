@@ -218,40 +218,40 @@ class NRSur7dq4Model(eqx.Module):
     ) -> Float[Array, " n_dim"]:
         # First construct array for coorbital frame
         # borrowing notation from gwsurrogate
-        coorb_x = jnp.zeros((Omega.shape[0], 7))
+        coorb_x = jnp.zeros(7)
 
-        sp = jnp.sin(Omega[:, 4])
-        cp = jnp.cos(Omega[:, 4])
+        sp = jnp.sin(Omega[4])
+        cp = jnp.cos(Omega[4])
 
-        coorb_x = coorb_x.at[:, 0].set(q)
-        coorb_x = coorb_x.at[:, 1].set(Omega[:, 5] * cp + Omega[:, 6] * sp)
-        coorb_x = coorb_x.at[:, 2].set(-Omega[:, 5] * sp + Omega[:, 6] * cp)
-        coorb_x = coorb_x.at[:, 3].set(Omega[:, 7])
+        coorb_x = coorb_x.at[0].set(q)
+        coorb_x = coorb_x.at[1].set(Omega[5] * cp + Omega[6] * sp)
+        coorb_x = coorb_x.at[2].set(-Omega[5] * sp + Omega[6] * cp)
+        coorb_x = coorb_x.at[3].set(Omega[7])
 
-        coorb_x = coorb_x.at[:, 4].set(Omega[:, 8] * cp + Omega[:, 9] * sp)
-        coorb_x = coorb_x.at[:, 5].set(-Omega[:, 8] * sp + Omega[:, 9] * cp)
-        coorb_x = coorb_x.at[:, 6].set(Omega[:, 10])
+        coorb_x = coorb_x.at[4].set(Omega[8] * cp + Omega[9] * sp)
+        coorb_x = coorb_x.at[5].set(-Omega[8] * sp + Omega[9] * cp)
+        coorb_x = coorb_x.at[6].set(Omega[10])
 
         return coorb_x
 
-    def _get_fit_params(self, x: Float[Array, " n_dim"]) -> Float[Array, " n_dim"]:
+    def _get_fit_params(self, params: Float[Array, " n_dim"]) -> Float[Array, " n_dim"]:
         # Generate fit params
-        fit_params = jnp.zeros(x.shape)
+        fit_params = jnp.zeros(params.shape)
 
-        q = x[:, 0]
+        q = params[0]
         eta = q / (1 + q) ** 2
-        chi_wtAvg = (q * x[:, 3] + x[:, 6]) / (1 + q)
-        chi_hat = (chi_wtAvg - 38.0 * eta / 113.0 * (x[:, 3] + x[:, 6])) / (
+        chi_wtAvg = (q * params[3] + params[6]) / (1 + q)
+        chi_hat = (chi_wtAvg - 38.0 * eta / 113.0 * (params[3] + params[6])) / (
             1.0 - 76.0 * eta / 113.0
         )
 
-        chi_a = (x[:, 3] - x[:, 6]) / 2
+        chi_a = (params[3] - params[6]) / 2
 
-        fit_params = fit_params.at[:, 0].set(jnp.log(q))
-        fit_params = fit_params.at[:, 1:3].set(x[:, 1:3])
-        fit_params = fit_params.at[:, 3].set(chi_hat)
-        fit_params = fit_params.at[:, 4:6].set(x[:, 4:6])
-        fit_params = fit_params.at[:, 6].set(chi_a)
+        fit_params = fit_params.at[0].set(jnp.log(q))
+        fit_params = fit_params.at[1:3].set(params[1:3])
+        fit_params = fit_params.at[3].set(chi_hat)
+        fit_params = fit_params.at[4:6].set(params[4:6])
+        fit_params = fit_params.at[6].set(chi_a)
 
         return fit_params
 
@@ -261,7 +261,7 @@ class NRSur7dq4Model(eqx.Module):
         q: Float,
         predictor: PolyPredictor,
     ) -> Float[Array, " n_Omega"]:
-        coorb_x = self._get_coorb_params(q, Omega_i[jnp.newaxis, :])
+        coorb_x = self._get_coorb_params(q, Omega_i)
         fit_params = self._get_fit_params(coorb_x)
 
         (

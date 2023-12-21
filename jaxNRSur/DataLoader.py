@@ -259,7 +259,7 @@ class NRSur7dq4DataLoader(eqx.Module):
         coefs = []
         bfOrders = []
 
-        for i in range(len(self.t_ds) - 1):
+        for i in range(len(self.t_ds)):
             local_coefs = []
             local_bfOrders = []
 
