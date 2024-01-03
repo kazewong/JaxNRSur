@@ -135,13 +135,13 @@ class NRSur7dq4DataLoader(eqx.Module):
     t_ds: Float[Array, " n_dynam"]
     diff_t_ds: Float[Array, " n_dynam-1"]
 
-    modes_plus: list[dict]
-    modes_minus: list[dict]
+    modes: list[dict]
     coorb: PolyPredictor
 
     @property
     def coorb_nmax(self) -> int:
         return self.coorb.n_max
+
     def __init__(
         self,
         path: str,
@@ -163,8 +163,7 @@ class NRSur7dq4DataLoader(eqx.Module):
         data = h5Group_to_dict(h5py.File(path, "r"))
         self.t_coorb = jnp.array(data["t_coorb"])
         self.t_ds = jnp.array(data["t_ds"])
-        self.diff_t_ds = jnp.diff(self.t_ds)
-
+        self.diff_t_ds = jnp.diff(self.t_ds, append=jnp.array([self.t_ds[-1]]))
 
         coorb_nmax = -100
         basis_nmax = -100
@@ -180,10 +179,7 @@ class NRSur7dq4DataLoader(eqx.Module):
 
         self.modes = []
         for i in range(len(modelist)):
-            self.modes_plus.append(
-                self.read_single_mode(data, modelist[i], n_max=basis_nmax)
-            )
-            self.modes_minus.append(
+            self.modes.append(
                 self.read_single_mode(data, modelist[i], n_max=basis_nmax)
             )
 
@@ -263,7 +259,7 @@ class NRSur7dq4DataLoader(eqx.Module):
         coefs = []
         bfOrders = []
 
-        for i in range(len(self.t_ds) - 1):
+        for i in range(len(self.t_ds)):
             local_coefs = []
             local_bfOrders = []
 

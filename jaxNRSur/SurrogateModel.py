@@ -214,7 +214,7 @@ class NRSur7dq4Model(eqx.Module):
             )
 
     def _get_coorb_params(
-        self, q: float, Omega: Float[Array, " n_Omega"]
+        self, q: Float, Omega: Float[Array, " n_Omega"]
     ) -> Float[Array, " n_dim"]:
         # First construct array for coorbital frame
         # borrowing notation from gwsurrogate
@@ -419,10 +419,10 @@ class NRSur7dq4Model(eqx.Module):
 
         init_state = (Omega_0, q, normA, normB)
 
-        predictors_paramters, n_max = eqx.partition(self.data.coorb, eqx.is_array)
+        predictors_parameters, n_max = eqx.partition(self.data.coorb, eqx.is_array)
         dt = self.data.diff_t_ds
 
-        extras = (predictors_paramters, dt)
+        extras = (predictors_parameters, dt)
 
         def timestepping_kernel(
             carry: tuple[Float[Array, " n_Omega"], Float, Float, Float], data
@@ -431,8 +431,8 @@ class NRSur7dq4Model(eqx.Module):
             Float[Array, " n_Omega"],
         ]:
             Omega, q, normA, normB = carry
-            predictors_paramters, dt = data
-            predictor = eqx.combine(predictors_paramters, n_max)
+            predictors_parameters, dt = data
+            predictor = eqx.combine(predictors_parameters, n_max)
             Omega = self.normalize_Omega(
                 self.forward_euler(q, Omega, predictor, dt), normA, normB
             )
