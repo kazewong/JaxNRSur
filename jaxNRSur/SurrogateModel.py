@@ -1,3 +1,4 @@
+from functools import partial
 import jax.numpy as jnp
 import jax
 from jaxNRSur.Spline import CubicSpline
@@ -218,40 +219,40 @@ class NRSur7dq4Model(eqx.Module):
     ) -> Float[Array, " n_dim"]:
         # First construct array for coorbital frame
         # borrowing notation from gwsurrogate
-        coorb_x = jnp.zeros((Omega.shape[0], 7))
+        coorb_x = jnp.zeros(7)
 
-        sp = jnp.sin(Omega[:, 4])
-        cp = jnp.cos(Omega[:, 4])
+        sp = jnp.sin(Omega[4])
+        cp = jnp.cos(Omega[4])
 
-        coorb_x = coorb_x.at[:, 0].set(q)
-        coorb_x = coorb_x.at[:, 1].set(Omega[:, 5] * cp + Omega[:, 6] * sp)
-        coorb_x = coorb_x.at[:, 2].set(-Omega[:, 5] * sp + Omega[:, 6] * cp)
-        coorb_x = coorb_x.at[:, 3].set(Omega[:, 7])
+        coorb_x = coorb_x.at[0].set(q)
+        coorb_x = coorb_x.at[1].set(Omega[5] * cp + Omega[6] * sp)
+        coorb_x = coorb_x.at[2].set(-Omega[5] * sp + Omega[6] * cp)
+        coorb_x = coorb_x.at[3].set(Omega[7])
 
-        coorb_x = coorb_x.at[:, 4].set(Omega[:, 8] * cp + Omega[:, 9] * sp)
-        coorb_x = coorb_x.at[:, 5].set(-Omega[:, 8] * sp + Omega[:, 9] * cp)
-        coorb_x = coorb_x.at[:, 6].set(Omega[:, 10])
+        coorb_x = coorb_x.at[4].set(Omega[8] * cp + Omega[9] * sp)
+        coorb_x = coorb_x.at[5].set(-Omega[8] * sp + Omega[9] * cp)
+        coorb_x = coorb_x.at[6].set(Omega[10])
 
         return coorb_x
 
-    def _get_fit_params(self, x: Float[Array, " n_dim"]) -> Float[Array, " n_dim"]:
+    def _get_fit_params(self, params: Float[Array, " n_dim"]) -> Float[Array, " n_dim"]:
         # Generate fit params
-        fit_params = jnp.zeros(x.shape)
+        fit_params = jnp.zeros(params.shape)
 
-        q = x[:, 0]
+        q = params[0]
         eta = q / (1 + q) ** 2
-        chi_wtAvg = (q * x[:, 3] + x[:, 6]) / (1 + q)
-        chi_hat = (chi_wtAvg - 38.0 * eta / 113.0 * (x[:, 3] + x[:, 6])) / (
+        chi_wtAvg = (q * params[3] + params[6]) / (1 + q)
+        chi_hat = (chi_wtAvg - 38.0 * eta / 113.0 * (params[3] + params[6])) / (
             1.0 - 76.0 * eta / 113.0
         )
 
-        chi_a = (x[:, 3] - x[:, 6]) / 2
+        chi_a = (params[3] - params[6]) / 2
 
-        fit_params = fit_params.at[:, 0].set(jnp.log(q))
-        fit_params = fit_params.at[:, 1:3].set(x[:, 1:3])
-        fit_params = fit_params.at[:, 3].set(chi_hat)
-        fit_params = fit_params.at[:, 4:6].set(x[:, 4:6])
-        fit_params = fit_params.at[:, 6].set(chi_a)
+        fit_params = fit_params.at[0].set(jnp.log(q))
+        fit_params = fit_params.at[1:3].set(params[1:3])
+        fit_params = fit_params.at[3].set(chi_hat)
+        fit_params = fit_params.at[4:6].set(params[4:6])
+        fit_params = fit_params.at[6].set(chi_a)
 
         return fit_params
 
@@ -261,7 +262,7 @@ class NRSur7dq4Model(eqx.Module):
         q: Float,
         predictor: PolyPredictor,
     ) -> Float[Array, " n_Omega"]:
-        coorb_x = self._get_coorb_params(q, Omega_i[jnp.newaxis, :])
+        coorb_x = self._get_coorb_params(q, Omega_i)
         fit_params = self._get_fit_params(coorb_x)
 
         (
@@ -338,13 +339,13 @@ class NRSur7dq4Model(eqx.Module):
 
         return Omega_normed
 
-    def construct_hlm_from_bases(self, lambdas, polypredictor_list, eim_basis, n_nodes):
-        hlm = jnp.zeros(len(self.data.t_coorb))
-
-        for i in range(n_nodes):
-            hlm = hlm.at[:].set(hlm + polypredictor_list[i](lambdas.T) * eim_basis[i])
-
-        return hlm
+    def construct_hlm_from_bases(
+        self,
+        lambdas: Float[Array, " n_dim"],
+        predictor: PolyPredictor,
+        eim_basis: Float[Array, " n_nodes n_sample"],
+    ) -> Float[Array, " n_sample"]:
+        return jnp.sum(evaluate_ensemble(predictor, lambdas).T @ eim_basis, axis=0)
 
     def get_coorb_hlm(self, lambdas, mode=(2, 2)):
         # TODO bad if statement...
@@ -355,24 +356,20 @@ class NRSur7dq4Model(eqx.Module):
                 lambdas,
                 self.data.modes[idx]["real_plus"]["predictors"],
                 self.data.modes[idx]["real_plus"]["eim_basis"],
-                self.data.modes[idx]["real_plus"]["n_nodes"],
             ) + 1j * self.construct_hlm_from_bases(
                 lambdas,
                 self.data.modes[idx]["imag_plus"]["predictors"],
                 self.data.modes[idx]["imag_plus"]["eim_basis"],
-                self.data.modes[idx]["imag_plus"]["n_nodes"],
             )
 
             h_lm_minus = self.construct_hlm_from_bases(
                 lambdas,
                 self.data.modes[idx]["real_minus"]["predictors"],
                 self.data.modes[idx]["real_minus"]["eim_basis"],
-                self.data.modes[idx]["real_minus"]["n_nodes"],
             ) + 1j * self.construct_hlm_from_bases(
                 lambdas,
                 self.data.modes[idx]["imag_minus"]["predictors"],
                 self.data.modes[idx]["imag_minus"]["eim_basis"],
-                self.data.modes[idx]["imag_minus"]["n_nodes"],
             )
 
             h_lm = h_lm_plus + h_lm_minus
@@ -385,15 +382,22 @@ class NRSur7dq4Model(eqx.Module):
                 lambdas,
                 self.data.modes[idx]["real"]["predictors"],
                 self.data.modes[idx]["real"]["eim_basis"],
-                self.data.modes[idx]["real"]["n_nodes"],
             ) + 1j * self.construct_hlm_from_bases(
                 lambdas,
                 self.data.modes[idx]["imag"]["predictors"],
                 self.data.modes[idx]["imag"]["eim_basis"],
-                self.data.modes[idx]["imag"]["n_nodes"],
             )
 
             return h_lm, jnp.zeros(h_lm.shape)
+
+    @staticmethod
+    @partial(jax.vmap, in_axes=(None, None, 1))
+    def interp_omega(
+        time_grid: Float[Array, " n_grid"],
+        time: Float[Array, " n_sample"],
+        Omega: Float[Array, " n_Omega"],
+    ):
+        return CubicSpline(time_grid, Omega)(time)
 
     def get_waveform(
         self,
@@ -411,8 +415,6 @@ class NRSur7dq4Model(eqx.Module):
         # Note that the spins are in the coprecessing frame
         q = params[0]
         Omega_0 = jnp.concatenate([init_quat, jnp.array([init_orb_phase]), params[1:]])
-        Omega = jnp.zeros((len(self.data.t_ds), len(Omega_0)))
-        Omega = Omega.at[0, :].set(Omega_0)
 
         normA = jnp.linalg.norm(params[1:4])
         normB = jnp.linalg.norm(params[4:7])
@@ -441,18 +443,19 @@ class NRSur7dq4Model(eqx.Module):
         # integral timestepper
         state, Omega = jax.lax.scan(timestepping_kernel, init_state, extras)
 
+        Omega = jnp.concatenate([Omega_0[None], Omega], axis=0)
+
         # Interpolating to the coorbital time array
         Omega_interp = jnp.zeros((len(self.data.t_coorb), len(Omega_0)))
-        for i in range(11):
-            Omega_interp = Omega_interp.at[:, i].set(
-                CubicSpline(self.data.t_ds, Omega[:, i])(self.data.t_coorb)
-            )
+        Omega_interp = self.interp_omega(self.data.t_ds, self.data.t_coorb, Omega).T
 
         # Get the lambda parameters to go into the waveform calculation
-        lambdas = self._get_fit_params(self._get_coorb_params(q, Omega_interp))
+        lambdas = jax.vmap(self._get_fit_params)(
+            jax.vmap(self._get_coorb_params, in_axes=(None, 0))(q, Omega_interp)
+        )
 
         # Testing
-        coorb_h22, coorb_h2m2 = self.get_coorb_hlm(lambdas)
+        coorb_h22, coorb_h2m2 = jax.vmap(self.get_coorb_hlm)(lambdas)
 
         return coorb_h22
 
