@@ -133,7 +133,7 @@ class NRHybSur3dq8DataLoader(eqx.Module):
 class NRSur7dq4DataLoader(eqx.Module):
     t_coorb: Float[Array, " n_sample"]
     t_ds: Float[Array, " n_dynam"]
-    diff_t_ds: Float[Array, " n_dynam-1"]
+    diff_t_ds: Float[Array, " n_dynam"]
 
     modes: list[dict]
     coorb: PolyPredictor
@@ -163,7 +163,7 @@ class NRSur7dq4DataLoader(eqx.Module):
         data = h5Group_to_dict(h5py.File(path, "r"))
         self.t_coorb = jnp.array(data["t_coorb"])
         self.t_ds = jnp.array(data["t_ds"])
-        self.diff_t_ds = jnp.diff(self.t_ds, append=jnp.array([self.t_ds[-1]]))
+        self.diff_t_ds = jnp.diff(self.t_ds, append=jnp.array([self.t_ds[-1] + 1e-6]))
 
         coorb_nmax = -100
         basis_nmax = -100
