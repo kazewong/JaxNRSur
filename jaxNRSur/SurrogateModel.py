@@ -266,16 +266,18 @@ class NRSur7dq4Model(eqx.Module):
         fit_params = self._get_fit_params(coorb_x)
 
         (
-            omega_orb_0_fit,
-            omega_orb_1_fit,
-            omega_fit,
             chiA_0_fit,
             chiA_1_fit,
             chiA_2_fit,
             chiB_0_fit,
             chiB_1_fit,
             chiB_2_fit,
-        ) = evaluate_ensemble(predictor, fit_params)
+            omega_fit,
+            omega_orb_0_fit,
+            omega_orb_1_fit,
+        ) = evaluate_ensemble(
+            predictor, fit_params
+        )  # TODO check this
 
         # Converting to dOmega_dt array
         dOmega_dt = jnp.zeros(len(Omega_i))
@@ -442,7 +444,6 @@ class NRSur7dq4Model(eqx.Module):
 
         # integral timestepper
         state, Omega = jax.lax.scan(timestepping_kernel, init_state, extras)
-
         Omega = jnp.concatenate([Omega_0[None], Omega], axis=0)
 
         # Interpolating to the coorbital time array

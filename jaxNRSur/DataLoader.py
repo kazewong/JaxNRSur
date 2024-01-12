@@ -163,7 +163,7 @@ class NRSur7dq4DataLoader(eqx.Module):
         data = h5Group_to_dict(h5py.File(path, "r"))
         self.t_coorb = jnp.array(data["t_coorb"])
         self.t_ds = jnp.array(data["t_ds"])
-        self.diff_t_ds = jnp.diff(self.t_ds, append=jnp.array([self.t_ds[-1] + 1e-6]))
+        self.diff_t_ds = jnp.diff(self.t_ds)
 
         coorb_nmax = -100
         basis_nmax = -100
@@ -259,7 +259,7 @@ class NRSur7dq4DataLoader(eqx.Module):
         coefs = []
         bfOrders = []
 
-        for i in range(len(self.t_ds)):
+        for i in range(len(self.t_ds) - 1):
             local_coefs = []
             local_bfOrders = []
 
