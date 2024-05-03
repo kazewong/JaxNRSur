@@ -181,6 +181,7 @@ class NRSur7dq4Model(eqx.Module):
     harmonics: list[SpinWeightedSphericalHarmonics]
     negative_harmonics: list[SpinWeightedSphericalHarmonics]
     modelist_dict: dict
+    n_modes: int
 
     def __init__(
         self,
@@ -204,6 +205,7 @@ class NRSur7dq4Model(eqx.Module):
         self.harmonics = []
         self.negative_harmonics = []
 
+        self.n_modes = len(modelist)
         self.modelist_dict = {}
         for i in range(len(modelist)):
             self.modelist_dict[modelist[i]] = i
@@ -347,7 +349,11 @@ class NRSur7dq4Model(eqx.Module):
         predictor: PolyPredictor,
         eim_basis: Float[Array, " n_nodes n_sample"],
     ) -> Float[Array, " n_sample"]:
-        return jnp.sum(evaluate_ensemble(predictor, lambdas).T @ eim_basis, axis=0)
+        return jnp.sum(
+            jax.vmap(evaluate_ensemble, in_axes=(None, 0))(predictor, lambdas).T
+            * eim_basis,
+            axis=0,
+        )
 
     def get_coorb_hlm(self, lambdas, mode=(2, 2)):
         # TODO bad if statement...
@@ -455,10 +461,32 @@ class NRSur7dq4Model(eqx.Module):
             jax.vmap(self._get_coorb_params, in_axes=(None, 0))(q, Omega_interp)
         )
 
-        # Testing
-        coorb_h22, coorb_h2m2 = jax.vmap(self.get_coorb_hlm)(lambdas)
+        # loop over modes to construct the coprecessing mode array
 
-        return coorb_h22
+        # TODO need to work out how to vmap this later
+        copre_array = []
+        coorb_h_pos = jnp.array(
+            []
+        )  # TODO this is just to get it to pass the precommit...
+        for mode in self.modelist_dict.keys():
+            # get the coorb hlms
+            coorb_h_pos, coorb_h_neg = self.get_coorb_hlm(lambdas, mode=mode)
+
+            # rotate to coprecessing frame
+            print(coorb_h_neg)
+            # copre_h_pos = coorb_h_pos * jnp.exp(-1j * mode[1] * Omega_interp[:, 4])
+            # copre_h_neg = coorb_h_neg * jnp.exp(1j * mode[1] * Omega_interp[:, 4])
+
+            # copre_array.append(copre_h_pos)
+            # TODO store the copre
+
+        copre_array = jnp.array(copre_array)
+
+        # rotate with wigner D matrices
+
+        # sum modes
+
+        return coorb_h_pos  # lambdas, coorb_h_pos
 
         # coeff = jnp.stack(jnp.array(self.get_multi_real_imag(self.mode_no22, params)))
         # modes = eqx.filter_vmap(self.get_mode, in_axes=(0, 0, None))(
