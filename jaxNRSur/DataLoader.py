@@ -133,7 +133,7 @@ class NRHybSur3dq8DataLoader(eqx.Module):
 class NRSur7dq4DataLoader(eqx.Module):
     t_coorb: Float[Array, " n_sample"]
     t_ds: Float[Array, " n_dynam"]
-    diff_t_ds: Float[Array, " n_dynam-1"]
+    diff_t_ds: Float[Array, " n_dynam"]
 
     modes: list[dict]
     coorb: PolyPredictor
@@ -227,6 +227,8 @@ class NRSur7dq4DataLoader(eqx.Module):
             result["real"] = self.read_mode_function(
                 file[f"hCoorb_{mode[0]}_{mode[1]}_real"], n_max
             )
+            # result['real_minus'] = 0 #TODO Make the structure of the m=0 modes similar to hangle in the same way as m != 0
+
             result["imag"] = self.read_mode_function(
                 file[f"hCoorb_{mode[0]}_{mode[1]}_imag"], n_max
             )
@@ -260,7 +262,6 @@ class NRSur7dq4DataLoader(eqx.Module):
         bfOrders = []
 
         for i in range(len(self.t_ds) - 1):
-            # The last time step is not included in the data
             local_coefs = []
             local_bfOrders = []
 

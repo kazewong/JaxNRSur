@@ -181,6 +181,7 @@ class NRSur7dq4Model(eqx.Module):
     harmonics: list[SpinWeightedSphericalHarmonics]
     negative_harmonics: list[SpinWeightedSphericalHarmonics]
     modelist_dict: dict
+    n_modes: int
 
     def __init__(
         self,
@@ -204,6 +205,7 @@ class NRSur7dq4Model(eqx.Module):
         self.harmonics = []
         self.negative_harmonics = []
 
+        self.n_modes = len(modelist)
         self.modelist_dict = {}
         for i in range(len(modelist)):
             self.modelist_dict[modelist[i]] = i
@@ -266,16 +268,18 @@ class NRSur7dq4Model(eqx.Module):
         fit_params = self._get_fit_params(coorb_x)
 
         (
-            omega_orb_0_fit,
-            omega_orb_1_fit,
-            omega_fit,
             chiA_0_fit,
             chiA_1_fit,
             chiA_2_fit,
             chiB_0_fit,
             chiB_1_fit,
             chiB_2_fit,
-        ) = evaluate_ensemble(predictor, fit_params)
+            omega_fit,
+            omega_orb_0_fit,
+            omega_orb_1_fit,
+        ) = evaluate_ensemble(
+            predictor, fit_params
+        )  # TODO check this
 
         # Converting to dOmega_dt array
         dOmega_dt = jnp.zeros(len(Omega_i))
@@ -345,7 +349,11 @@ class NRSur7dq4Model(eqx.Module):
         predictor: PolyPredictor,
         eim_basis: Float[Array, " n_nodes n_sample"],
     ) -> Float[Array, " n_sample"]:
-        return jnp.sum(evaluate_ensemble(predictor, lambdas).T @ eim_basis, axis=0)
+        return jnp.sum(
+            jax.vmap(evaluate_ensemble, in_axes=(None, 0))(predictor, lambdas).T
+            * eim_basis,
+            axis=0,
+        )
 
     def get_coorb_hlm(self, lambdas, mode=(2, 2)):
         # TODO bad if statement...
@@ -421,10 +429,10 @@ class NRSur7dq4Model(eqx.Module):
 
         init_state = (Omega_0, q, normA, normB)
 
-        predictors_paramters, n_max = eqx.partition(self.data.coorb, eqx.is_array)
+        predictors_parameters, n_max = eqx.partition(self.data.coorb, eqx.is_array)
         dt = self.data.diff_t_ds
 
-        extras = (predictors_paramters, dt)
+        extras = (predictors_parameters, dt)
 
         def timestepping_kernel(
             carry: tuple[Float[Array, " n_Omega"], Float, Float, Float], data
@@ -433,8 +441,8 @@ class NRSur7dq4Model(eqx.Module):
             Float[Array, " n_Omega"],
         ]:
             Omega, q, normA, normB = carry
-            predictors_paramters, dt = data
-            predictor = eqx.combine(predictors_paramters, n_max)
+            predictors_parameters, dt = data
+            predictor = eqx.combine(predictors_parameters, n_max)
             Omega = self.normalize_Omega(
                 self.forward_euler(q, Omega, predictor, dt), normA, normB
             )
@@ -442,7 +450,6 @@ class NRSur7dq4Model(eqx.Module):
 
         # integral timestepper
         state, Omega = jax.lax.scan(timestepping_kernel, init_state, extras)
-
         Omega = jnp.concatenate([Omega_0[None], Omega], axis=0)
 
         # Interpolating to the coorbital time array
@@ -454,10 +461,32 @@ class NRSur7dq4Model(eqx.Module):
             jax.vmap(self._get_coorb_params, in_axes=(None, 0))(q, Omega_interp)
         )
 
-        # Testing
-        coorb_h22, coorb_h2m2 = jax.vmap(self.get_coorb_hlm)(lambdas)
+        # loop over modes to construct the coprecessing mode array
 
-        return coorb_h22
+        # TODO need to work out how to vmap this later
+        copre_array = []
+        coorb_h_pos = jnp.array(
+            []
+        )  # TODO this is just to get it to pass the precommit...
+        for mode in self.modelist_dict.keys():
+            # get the coorb hlms
+            coorb_h_pos, coorb_h_neg = self.get_coorb_hlm(lambdas, mode=mode)
+
+            # rotate to coprecessing frame
+            print(coorb_h_neg)
+            # copre_h_pos = coorb_h_pos * jnp.exp(-1j * mode[1] * Omega_interp[:, 4])
+            # copre_h_neg = coorb_h_neg * jnp.exp(1j * mode[1] * Omega_interp[:, 4])
+
+            # copre_array.append(copre_h_pos)
+            # TODO store the copre
+
+        copre_array = jnp.array(copre_array)
+
+        # rotate with wigner D matrices
+
+        # sum modes
+
+        return coorb_h_pos  # lambdas, coorb_h_pos
 
         # coeff = jnp.stack(jnp.array(self.get_multi_real_imag(self.mode_no22, params)))
         # modes = eqx.filter_vmap(self.get_mode, in_axes=(0, 0, None))(
