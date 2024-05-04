@@ -1,20 +1,20 @@
 repos:
-  - repo: https://github.com/psf/black
-    rev: 24.1.1
+  - repo: https://github.com/ambv/black
+    rev: 23.9.1
     hooks:
     - id: black
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: 'v0.1.14'
+  - repo: https://github.com/charliermarsh/ruff-pre-commit
+    rev: 'v0.0.290'
     hooks:
       - id: ruff
         args: ["--fix"]
   - repo: https://github.com/RobertCraigie/pyright-python
-    rev: v1.1.349
+    rev: v1.1.327
     hooks:
     - id: pyright
-      additional_dependencies: [beartype, einops, jax, jaxtyping, pytest, tensorflow, tf2onnx, typing_extensions, lineax]
+      additional_dependencies: [beartype, einops, jax, jaxtyping, pytest, tensorflow, tf2onnx, typing_extensions, equinox, lineax, mkdocs_gen_files]
   - repo: https://github.com/nbQA-dev/nbQA
-    rev: 1.7.1
+    rev: 1.7.0
     hooks:
     - id: nbqa-black
       additional_dependencies: [ipython==8.12, black]

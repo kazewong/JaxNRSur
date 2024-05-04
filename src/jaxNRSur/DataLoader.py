@@ -227,7 +227,9 @@ class NRSur7dq4DataLoader(eqx.Module):
             result["real"] = self.read_mode_function(
                 file[f"hCoorb_{mode[0]}_{mode[1]}_real"], n_max
             )
-            # result['real_minus'] = 0 #TODO Make the structure of the m=0 modes similar to hangle in the same way as m != 0
+            # result['real_minus'] = 0
+            # TODO Make the structure of the m=0 modes similar
+            # to hangle in the same way as m != 0
 
             result["imag"] = self.read_mode_function(
                 file[f"hCoorb_{mode[0]}_{mode[1]}_imag"], n_max
