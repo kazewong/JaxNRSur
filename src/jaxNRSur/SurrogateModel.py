@@ -82,6 +82,15 @@ class NRHybSur3dq8Model(eqx.Module):
         )
         self.negative_mode_prefactor = jnp.array(negative_mode_prefactor)
 
+    def __call__(
+        self,
+        time: Float[Array, " n_sample"],
+        params: Float[Array, " n_dim"],
+        theta: float = 0.0,
+        phi: float = 0.0,
+    ) -> Float[Array, " n_sample"]:
+        return self.get_waveform(time, params, theta, phi)
+
     @property
     def n_modes(self) -> int:
         return len(self.data.modes)
