@@ -1,6 +1,13 @@
 # JaxNRSur
 Numerical relativity surrogate waveform in Jax
 
+<a href="https://jaxnrsur.readthedocs.io/en/latest/">
+<img src="https://badgen.net/badge/Read/the doc/blue" alt="doc"/>
+</a>
+<a href="https://github.com/kazewong/JaxNRSur/blob/main/LICENSE">
+<img src="https://badgen.net/badge/License/MIT/blue" alt="doc"/>
+</a>
+
 # Quickstart
 
 ## Installation
