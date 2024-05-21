@@ -160,6 +160,15 @@ class NRSur7dq4DataLoader(eqx.Module):
             (4, 4),
         ],
     ) -> None:
+        """
+        Initialize the data loader for the NRSur7dq4 model
+
+        Args:
+            path (str): Path to the HDF5 file
+            modelist (list[tuple[int, int]], optional): List of modes to load.
+            Defaults to [(2, 0), (2, 1), (2, 2), (3, 0), (3, 1), 
+                (3, 2), (3, 3), (4, 0), (4, 1), (4, 2), (4, 3), (4, 4)].
+        """
         data = h5Group_to_dict(h5py.File(path, "r"))
         self.t_coorb = jnp.array(data["t_coorb"])
         self.t_ds = jnp.array(data["t_ds"])
@@ -256,7 +265,7 @@ class NRSur7dq4DataLoader(eqx.Module):
 
         @eqx.filter_vmap(in_axes=(0, 0))
         def combine_poly_predictors(
-            coefs: jnp.ndarray, bfOrders: jnp.ndarray
+            coefs: Float[Array, " n_coefs n_order"], bfOrders: Float[Array, " n_order"]
         ) -> PolyPredictor:
             return make_polypredictor_ensemble(coefs, bfOrders, n_max)
 
