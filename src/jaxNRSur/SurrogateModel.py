@@ -54,6 +54,15 @@ class NRHybSur3dq8Model(eqx.Module):
             (5, 5),
         ],
     ):
+        """
+        Initialize NRHybSur3dq8Model.
+        The model is described in the paper:
+        https://journals.aps.org/prd/abstract/10.1103/PhysRevD.99.064045
+
+        Args:
+            data_path (str): Path to the data file.
+            modelist (list[tuple[int, int]]): List of modes to be used.
+        """
         self.data = NRHybSur3dq8DataLoader(data_path, modelist=modelist)
         self.harmonics = []
         self.negative_harmonics = []
@@ -89,16 +98,36 @@ class NRHybSur3dq8Model(eqx.Module):
         theta: float = 0.0,
         phi: float = 0.0,
     ) -> Float[Array, " n_sample"]:
+        """
+        Alias for get_waveform.
+
+        Args:
+            time (Float[Array, " n_sample"]): Time grid.
+            params (Float[Array, " n_dim"]): Source parameters.
+            theta (float, optional): Polar angle. Defaults to 0.0.
+            phi (float, optional): Azimuthal angle. Defaults to 0.0.
+        
+        """
         return self.get_waveform(time, params, theta, phi)
 
     @property
     def n_modes(self) -> int:
+        """
+        Number of modes in the model.
+        """
         return len(self.data.modes)
 
     @staticmethod
     def get_eim(
         eim_dict: dict, params: Float[Array, " n_dim"]
     ) -> Float[Array, " n_sample"]:
+        """
+        Construct the EIM basis given the source parameters.
+
+        Args:
+            eim_dict (dict): EIM dictionary.
+            params (Float[Array, " n_dim"]): Source parameters.
+        """
         result = jnp.zeros((eim_dict["n_nodes"], 1))
         for i in range(eim_dict["n_nodes"]):
             result = result.at[i].set(eim_dict["predictors"][i](params))
