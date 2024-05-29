@@ -32,13 +32,8 @@ h = model(time, params)
 Soon, we will provide an interface for the user to interact with the surrogate data as well.
 
 ## Surrogate data
-At some point, we will add the capability to download the data from Zenodo to the data loader, but for the time being, download the relevant data from here:
 
-NRHybSur3dq8.h5:
-https://zenodo.org/records/3348115/files/NRHybSur3dq8.h5?download=1
-
-NRSur7dq4.h5:
-https://zenodo.org/records/3348115/files/NRSur7dq4.h5?download=1
+The data needed by the surrogate model will be downloaded and stored at `$HOME/.jaxNRSur`, and if it is already downloaded, then it will reuse the cached data
 
 # Benchmark
 
