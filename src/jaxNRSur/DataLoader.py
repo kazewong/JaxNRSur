@@ -4,6 +4,9 @@ from jaxNRSur.PolyPredictor import PolyPredictor, make_polypredictor_ensemble
 import jax.numpy as jnp
 import equinox as eqx
 from jaxtyping import Array, Float
+import requests
+import os
+
 
 h5_mode_tuple: dict[tuple[int, int], str] = {
     (2, 0): "ITEM_6",  # No Imaginary part
@@ -18,6 +21,28 @@ h5_mode_tuple: dict[tuple[int, int], str] = {
     (4, 4): "ITEM_1",
     (5, 5): "ITEM_10",
 }
+
+
+def download_from_zenodo(url: str, local_filename: str) -> bool:
+    """
+    Helper function to download data from zenodo
+    """
+    # Send the HTTP request to the URL
+    response = requests.get(url, stream=True)  # type: ignore
+
+    # Check if the request was successful
+    if response.status_code == 200:
+        # Open a local file for writing the binary content
+        with open(local_filename, "wb") as f:
+            # Write the content in chunks to avoid memory overload
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:  # Filter out keep-alive chunks
+                    f.write(chunk)
+        print(f"File downloaded successfully and saved as {local_filename}")
+        return True
+    else:
+        print(f"Failed to download the file. Status code: {response.status_code}")
+        return False
 
 
 def h5Group_to_dict(h5_group: h5py.Group) -> dict:
@@ -39,7 +64,6 @@ class NRHybSur3dq8DataLoader(eqx.Module):
 
     def __init__(
         self,
-        path: str,
         modelist: list[tuple[int, int]] = [
             (2, 2),
             (2, 1),
@@ -54,7 +78,25 @@ class NRHybSur3dq8DataLoader(eqx.Module):
             (5, 5),
         ],
     ) -> None:
-        data = h5py.File(path, "r")
+        home_directory = os.environ["HOME"]
+        os.makedirs(home_directory+"/.jaxNRSur", exist_ok=True)
+
+        try:
+            print("Try loading file from cache")
+            data = h5py.File(home_directory + "/.jaxNRSur/NRHybSur3dq8.h5", "r")
+            print("Cache found and finish loading data")
+        except:
+            print("Cache not found, downloading from Zenodo")
+            downloaded = download_from_zenodo(
+                "https://zenodo.org/records/3348115/files/NRHybSur3dq8.h5?download=1",
+                home_directory + "/.jaxNRSur/NRHybSur3dq8.h5",
+            )
+            if downloaded:
+                print("Download successful, loading data")
+                data = h5py.File(home_directory + "/.jaxNRSur/NRHybSur3dq8.h5", "r")
+            else:
+                raise KeyError("Cannot download data from zenodo")
+
         self.sur_time = jnp.array(data["domain"])
 
         self.modes = []
@@ -166,7 +208,7 @@ class NRSur7dq4DataLoader(eqx.Module):
         Args:
             path (str): Path to the HDF5 file
             modelist (list[tuple[int, int]], optional): List of modes to load.
-            Defaults to [(2, 0), (2, 1), (2, 2), (3, 0), (3, 1), 
+            Defaults to [(2, 0), (2, 1), (2, 2), (3, 0), (3, 1),
                 (3, 2), (3, 3), (4, 0), (4, 1), (4, 2), (4, 3), (4, 4)].
         """
         data = h5Group_to_dict(h5py.File(path, "r"))

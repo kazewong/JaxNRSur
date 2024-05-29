@@ -39,7 +39,6 @@ class NRHybSur3dq8Model(eqx.Module):
 
     def __init__(
         self,
-        data_path: str,
         modelist: list[tuple[int, int]] = [
             (2, 2),
             (2, 1),
@@ -60,10 +59,9 @@ class NRHybSur3dq8Model(eqx.Module):
         https://journals.aps.org/prd/abstract/10.1103/PhysRevD.99.064045
 
         Args:
-            data_path (str): Path to the data file.
             modelist (list[tuple[int, int]]): List of modes to be used.
         """
-        self.data = NRHybSur3dq8DataLoader(data_path, modelist=modelist)
+        self.data = NRHybSur3dq8DataLoader(modelist=modelist)
         self.harmonics = []
         self.negative_harmonics = []
         negative_mode_prefactor = []
