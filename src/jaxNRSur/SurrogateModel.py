@@ -237,7 +237,7 @@ class NRSur7dq4Model(eqx.Module):
             (4, 4),
         ],
     ):
-        self.data = NRSur7dq4DataLoader(data_path, modelist=modelist)
+        self.data = NRSur7dq4DataLoader(modelist=modelist)
         self.harmonics = []
         self.negative_harmonics = []
 

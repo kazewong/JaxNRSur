@@ -214,7 +214,7 @@ class NRSur7dq4DataLoader(eqx.Module):
         """
         h5_file = load_data("https://zenodo.org/records/3348115/files/NRSur7dq4.h5?download=1", "NRSur7dq4.h5")
 
-        data = h5Group_to_dict(h5py.File(path, "r"))
+        data = h5Group_to_dict(h5py.File(h5_file, "r"))
         self.t_coorb = jnp.array(data["t_coorb"])
         self.t_ds = jnp.array(data["t_ds"])
         self.diff_t_ds = jnp.diff(self.t_ds)
