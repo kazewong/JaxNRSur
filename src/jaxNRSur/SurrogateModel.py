@@ -221,7 +221,6 @@ class NRSur7dq4Model(eqx.Module):
 
     def __init__(
         self,
-        data_path: str,
         modelist: list[tuple[int, int]] = [
             (2, 0),
             (2, 1),
