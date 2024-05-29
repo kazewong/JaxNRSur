@@ -44,6 +44,25 @@ def download_from_zenodo(url: str, local_filename: str) -> bool:
         print(f"Failed to download the file. Status code: {response.status_code}")
         return False
 
+def load_data(url: str, local_filename: str) -> h5py.File:
+    home_directory = os.environ["HOME"]
+    os.makedirs(home_directory+"/.jaxNRSur", exist_ok=True)
+    try:
+        print("Try loading file from cache")
+        data = h5py.File(home_directory + "/.jaxNRSur/"+ local_filename, "r")
+        print("Cache found and finish loading data")
+    except:
+        print("Cache not found, downloading from Zenodo")
+        downloaded = download_from_zenodo(
+            url,
+            home_directory + "/.jaxNRSur/"+local_filename,
+        )
+        if downloaded:
+            print("Download successful, loading data")
+            data = h5py.File(home_directory + "/.jaxNRSur/" + local_filename, "r")
+        else:
+            raise KeyError("Cannot download data from zenodo")
+    return data
 
 def h5Group_to_dict(h5_group: h5py.Group) -> dict:
     result = {}
@@ -78,25 +97,8 @@ class NRHybSur3dq8DataLoader(eqx.Module):
             (5, 5),
         ],
     ) -> None:
-        home_directory = os.environ["HOME"]
-        os.makedirs(home_directory+"/.jaxNRSur", exist_ok=True)
 
-        try:
-            print("Try loading file from cache")
-            data = h5py.File(home_directory + "/.jaxNRSur/NRHybSur3dq8.h5", "r")
-            print("Cache found and finish loading data")
-        except:
-            print("Cache not found, downloading from Zenodo")
-            downloaded = download_from_zenodo(
-                "https://zenodo.org/records/3348115/files/NRHybSur3dq8.h5?download=1",
-                home_directory + "/.jaxNRSur/NRHybSur3dq8.h5",
-            )
-            if downloaded:
-                print("Download successful, loading data")
-                data = h5py.File(home_directory + "/.jaxNRSur/NRHybSur3dq8.h5", "r")
-            else:
-                raise KeyError("Cannot download data from zenodo")
-
+        data = load_data("https://zenodo.org/records/3348115/files/NRHybSur3dq8.h5?download=1", "NRHybSur3dq8.h5")
         self.sur_time = jnp.array(data["domain"])
 
         self.modes = []
@@ -186,7 +188,6 @@ class NRSur7dq4DataLoader(eqx.Module):
 
     def __init__(
         self,
-        path: str,
         modelist: list[tuple[int, int]] = [
             (2, 0),
             (2, 1),
@@ -211,6 +212,8 @@ class NRSur7dq4DataLoader(eqx.Module):
             Defaults to [(2, 0), (2, 1), (2, 2), (3, 0), (3, 1),
                 (3, 2), (3, 3), (4, 0), (4, 1), (4, 2), (4, 3), (4, 4)].
         """
+        h5_file = load_data("https://zenodo.org/records/3348115/files/NRSur7dq4.h5?download=1", "NRSur7dq4.h5")
+
         data = h5Group_to_dict(h5py.File(path, "r"))
         self.t_coorb = jnp.array(data["t_coorb"])
         self.t_ds = jnp.array(data["t_ds"])
