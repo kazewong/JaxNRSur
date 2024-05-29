@@ -50,7 +50,7 @@ def load_data(url: str, local_filename: str) -> h5py.File:
     try:
         print("Try loading file from cache")
         data = h5py.File(home_directory + "/.jaxNRSur/"+ local_filename, "r")
-        print("Cache found and finish loading data")
+        print("Cache found and loading data")
     except:
         print("Cache not found, downloading from Zenodo")
         downloaded = download_from_zenodo(
@@ -214,7 +214,7 @@ class NRSur7dq4DataLoader(eqx.Module):
         """
         h5_file = load_data("https://zenodo.org/records/3348115/files/NRSur7dq4.h5?download=1", "NRSur7dq4.h5")
 
-        data = h5Group_to_dict(h5py.File(h5_file, "r"))
+        data = h5Group_to_dict(h5_file)
         self.t_coorb = jnp.array(data["t_coorb"])
         self.t_ds = jnp.array(data["t_ds"])
         self.diff_t_ds = jnp.diff(self.t_ds)
