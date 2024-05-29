@@ -25,7 +25,7 @@ import jax.numpy as jnp
 from jaxNRSur.SurrogateModel import NRHybSur3dq8Model
 time = jnp.linspace(-1000, 100, 100000)
 params = jnp.array([0.9, 0.1, 0.1])
-model = NRHybSur3dq8Model("./NRHybSur3dq8.h5")
+model = NRHybSur3dq8Model()
 h = model(time, params)
 ```
 
