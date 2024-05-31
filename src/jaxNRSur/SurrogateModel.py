@@ -213,7 +213,7 @@ class NRHybSur3dq8Model(eqx.Module):
 
 class NRSur7dq4Model(eqx.Module):
     data: NRSur7dq4DataLoader
-    harmonics: list[SpinWeightedSphericalHarmonics]
+    harmonics: list[tuple[SpinWeightedSphericalHarmonics,SpinWeightedSphericalHarmonics]]
     modelist_dict: dict
     n_modes: int
 
@@ -222,25 +222,16 @@ class NRSur7dq4Model(eqx.Module):
         modelist: list[tuple[int, int]] = [
             (2, 0),
             (2, 1),
-            (2, -1),
             (2, 2),
-            (2, -2),
             (3, 0),
             (3, 1),
-            (3, -1),
             (3, 2),
-            (3, -2),
             (3, 3),
-            (3, -3),
             (4, 0),
             (4, 1),
-            (4, -1),
             (4, 2),
-            (4, -2),
             (4, 3),
-            (4, -3),
             (4, 4),
-            (4, -4),
         ],
     ):
         self.data = NRSur7dq4DataLoader(modelist=modelist)
@@ -252,7 +243,11 @@ class NRSur7dq4Model(eqx.Module):
             self.modelist_dict[modelist[i]] = i
 
         for mode in modelist:
-            self.harmonics.append(SpinWeightedSphericalHarmonics(-2, mode[0], mode[1]))
+            # TODO: m=0 case gets duplicated! handle with care elsewhere
+            self.harmonics.append((
+                SpinWeightedSphericalHarmonics(-2, mode[0], mode[1]),
+                 SpinWeightedSphericalHarmonics(-2, mode[0], -mode[1])
+            ))
 
     def _get_coorb_params(
         self, q: Float, Omega: Float[Array, " n_Omega"]
