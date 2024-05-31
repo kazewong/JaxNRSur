@@ -32,7 +32,6 @@ class NRHybSur3dq8Model(eqx.Module):
     data: NRHybSur3dq8DataLoader
     mode_no22: list[dict]
     harmonics: list[SpinWeightedSphericalHarmonics]
-    negative_harmonics: list[SpinWeightedSphericalHarmonics]
     mode_22_index: int
     m_mode: Int[Array, " n_modes-1"]
     negative_mode_prefactor: Int[Array, " n_modes-1"]
@@ -215,7 +214,6 @@ class NRHybSur3dq8Model(eqx.Module):
 class NRSur7dq4Model(eqx.Module):
     data: NRSur7dq4DataLoader
     harmonics: list[SpinWeightedSphericalHarmonics]
-    negative_harmonics: list[SpinWeightedSphericalHarmonics]
     modelist_dict: dict
     n_modes: int
 
@@ -224,21 +222,29 @@ class NRSur7dq4Model(eqx.Module):
         modelist: list[tuple[int, int]] = [
             (2, 0),
             (2, 1),
+            (2, -1),
             (2, 2),
+            (2, -2),
             (3, 0),
             (3, 1),
+            (3, -1),
             (3, 2),
+            (3, -2),
             (3, 3),
+            (3, -3),
             (4, 0),
             (4, 1),
+            (4, -1),
             (4, 2),
+            (4, -2),
             (4, 3),
+            (4, -3),
             (4, 4),
+            (4, -4),
         ],
     ):
         self.data = NRSur7dq4DataLoader(modelist=modelist)
         self.harmonics = []
-        self.negative_harmonics = []
 
         self.n_modes = len(modelist)
         self.modelist_dict = {}
@@ -247,9 +253,6 @@ class NRSur7dq4Model(eqx.Module):
 
         for mode in modelist:
             self.harmonics.append(SpinWeightedSphericalHarmonics(-2, mode[0], mode[1]))
-            self.negative_harmonics.append(
-                SpinWeightedSphericalHarmonics(-2, mode[0], -mode[1])
-            )
 
     def _get_coorb_params(
         self, q: Float, Omega: Float[Array, " n_Omega"]
@@ -415,8 +418,11 @@ class NRSur7dq4Model(eqx.Module):
         )
 
         # Eq. 6 in https://arxiv.org/pdf/1905.09300.pdf
-        h_lm_sum = (h_lm_plus + h_lm_minus)/2
-        h_lm_diff = (h_lm_plus - h_lm_minus)/2
+        # NOTE: factor of 2?
+        # also, in m=0 case sum = diff currently
+        # but it used to be zero
+        h_lm_sum = (h_lm_plus + h_lm_minus) / 2
+        h_lm_diff = (h_lm_plus - h_lm_minus) / 2
 
         return h_lm_sum, h_lm_diff
 
