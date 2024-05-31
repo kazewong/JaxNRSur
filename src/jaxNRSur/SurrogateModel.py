@@ -394,10 +394,13 @@ class NRSur7dq4Model(eqx.Module):
         )
 
     def get_coorb_hlm(self, lambdas, mode=(2, 2)):
-        # TODO bad if statement...
 
+        # surrogate is built on the symmetric (sum) and antisymmetric (diff)
+        # combinations of the +|m| and -|m| modes
+        # (although they are confusingly labeled "plus" and "minus" in 
+        # the file)
         idx = self.modelist_dict[mode]
-        h_lm_plus = self.construct_hlm_from_bases(
+        h_lm_sum = self.construct_hlm_from_bases(
             lambdas,
             self.data.modes[idx]["real_plus"]["predictors"],
             self.data.modes[idx]["real_plus"]["eim_basis"],
@@ -407,7 +410,7 @@ class NRSur7dq4Model(eqx.Module):
             self.data.modes[idx]["imag_plus"]["eim_basis"],
         )
 
-        h_lm_minus = self.construct_hlm_from_bases(
+        h_lm_diff = self.construct_hlm_from_bases(
             lambdas,
             self.data.modes[idx]["real_minus"]["predictors"],
             self.data.modes[idx]["real_minus"]["eim_basis"],
@@ -421,10 +424,10 @@ class NRSur7dq4Model(eqx.Module):
         # NOTE: factor of 2?
         # also, in m=0 case sum = diff currently
         # but it used to be zero
-        h_lm_sum = (h_lm_plus + h_lm_minus) / 2
-        h_lm_diff = (h_lm_plus - h_lm_minus) / 2
+        h_lm_plus = (h_lm_sum + h_lm_diff) / 2
+        h_lm_minus = (h_lm_sum - h_lm_diff) / 2
 
-        return h_lm_sum, h_lm_diff
+        return h_lm_plus, h_lm_minus
 
         # else:
         #     h_lm = self.construct_hlm_from_bases(
@@ -454,6 +457,7 @@ class NRSur7dq4Model(eqx.Module):
         params: Float[Array, " n_dim"],
         theta: float = 0.0,
         phi: float = 0.0,
+        # quaternions
         init_quat: Float[Array, " n_quat"] = jnp.array([1.0, 0.0, 0.0, 0.0]),
         init_orb_phase: float = 0.0,
     ) -> Float[Array, " n_sample"]:
@@ -490,11 +494,12 @@ class NRSur7dq4Model(eqx.Module):
             return (Omega, q, normA, normB), Omega
 
         # integral timestepper
+        # scan expect a function and initial stata, plus the data
         state, Omega = jax.lax.scan(timestepping_kernel, init_state, extras)
         Omega = jnp.concatenate([Omega_0[None], Omega], axis=0)
 
         # Interpolating to the coorbital time array
-        Omega_interp = jnp.zeros((len(self.data.t_coorb), len(Omega_0)))
+        # Omega_interp = jnp.zeros((len(self.data.t_coorb), len(Omega_0)))
         Omega_interp = self.interp_omega(self.data.t_ds, self.data.t_coorb, Omega).T
 
         # Get the lambda parameters to go into the waveform calculation

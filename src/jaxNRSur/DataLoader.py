@@ -262,21 +262,20 @@ class NRSur7dq4DataLoader(eqx.Module):
 
     def read_single_mode(self, file: dict, mode: tuple[int, int], n_max: int) -> dict:
         result = {}
-        if mode[1] != 0:
+        if mode[1] > 0:
             result["real_plus"] = self.read_mode_function(
                 file[f"hCoorb_{mode[0]}_{mode[1]}_Re+"], n_max
             )
             result["imag_plus"] = self.read_mode_function(
                 file[f"hCoorb_{mode[0]}_{mode[1]}_Im+"], n_max
             )
-
+        elif mode[1] < 0:
             result["real_minus"] = self.read_mode_function(
-                file[f"hCoorb_{mode[0]}_{mode[1]}_Re-"], n_max
+                file[f"hCoorb_{mode[0]}_{-mode[1]}_Re-"], n_max
             )
             result["imag_minus"] = self.read_mode_function(
-                file[f"hCoorb_{mode[0]}_{mode[1]}_Im-"], n_max
+                file[f"hCoorb_{mode[0]}_{-mode[1]}_Im-"], n_max
             )
-
         else:
             result["real_plus"] = self.read_mode_function(
                 file[f"hCoorb_{mode[0]}_{mode[1]}_real"], n_max
@@ -290,9 +289,9 @@ class NRSur7dq4DataLoader(eqx.Module):
             )
             
             node_data = {
-                'nodeModelers': {"coefs_0": [0], 'bfOrders_0': [0]},
-                'nodeIndices': [0],
-                'EIBasis': [0],
+                'nodeModelers': {"coefs_0": jnp.array([0]), 'bfOrders_0': jnp.zeros((0,0))},
+                'nodeIndices': jnp.array([0]),
+                'EIBasis': jnp.array([0]),
             }
             result["real_minus"] = self.read_mode_function(
                 node_data, 1
