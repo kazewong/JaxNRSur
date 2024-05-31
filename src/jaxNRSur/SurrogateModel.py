@@ -394,44 +394,44 @@ class NRSur7dq4Model(eqx.Module):
         # TODO bad if statement...
 
         idx = self.modelist_dict[mode]
-        if mode[1] != 0:
-            h_lm_plus = self.construct_hlm_from_bases(
-                lambdas,
-                self.data.modes[idx]["real_plus"]["predictors"],
-                self.data.modes[idx]["real_plus"]["eim_basis"],
-            ) + 1j * self.construct_hlm_from_bases(
-                lambdas,
-                self.data.modes[idx]["imag_plus"]["predictors"],
-                self.data.modes[idx]["imag_plus"]["eim_basis"],
-            )
+        h_lm_plus = self.construct_hlm_from_bases(
+            lambdas,
+            self.data.modes[idx]["real_plus"]["predictors"],
+            self.data.modes[idx]["real_plus"]["eim_basis"],
+        ) + 1j * self.construct_hlm_from_bases(
+            lambdas,
+            self.data.modes[idx]["imag_plus"]["predictors"],
+            self.data.modes[idx]["imag_plus"]["eim_basis"],
+        )
 
-            h_lm_minus = self.construct_hlm_from_bases(
-                lambdas,
-                self.data.modes[idx]["real_minus"]["predictors"],
-                self.data.modes[idx]["real_minus"]["eim_basis"],
-            ) + 1j * self.construct_hlm_from_bases(
-                lambdas,
-                self.data.modes[idx]["imag_minus"]["predictors"],
-                self.data.modes[idx]["imag_minus"]["eim_basis"],
-            )
+        h_lm_minus = self.construct_hlm_from_bases(
+            lambdas,
+            self.data.modes[idx]["real_minus"]["predictors"],
+            self.data.modes[idx]["real_minus"]["eim_basis"],
+        ) + 1j * self.construct_hlm_from_bases(
+            lambdas,
+            self.data.modes[idx]["imag_minus"]["predictors"],
+            self.data.modes[idx]["imag_minus"]["eim_basis"],
+        )
 
-            h_lm = h_lm_plus + h_lm_minus
-            h_lnegm = h_lm_plus - h_lm_minus
+        # Eq. 6 in https://arxiv.org/pdf/1905.09300.pdf
+        h_lm_sum = (h_lm_plus + h_lm_minus)/2
+        h_lm_diff = (h_lm_plus - h_lm_minus)/2
 
-            return h_lm, h_lnegm
+        return h_lm_sum, h_lm_diff
 
-        else:
-            h_lm = self.construct_hlm_from_bases(
-                lambdas,
-                self.data.modes[idx]["real"]["predictors"],
-                self.data.modes[idx]["real"]["eim_basis"],
-            ) + 1j * self.construct_hlm_from_bases(
-                lambdas,
-                self.data.modes[idx]["imag"]["predictors"],
-                self.data.modes[idx]["imag"]["eim_basis"],
-            )
+        # else:
+        #     h_lm = self.construct_hlm_from_bases(
+        #         lambdas,
+        #         self.data.modes[idx]["real"]["predictors"],
+        #         self.data.modes[idx]["real"]["eim_basis"],
+        #     ) + 1j * self.construct_hlm_from_bases(
+        #         lambdas,
+        #         self.data.modes[idx]["imag"]["predictors"],
+        #         self.data.modes[idx]["imag"]["eim_basis"],
+        #     )
 
-            return h_lm, jnp.zeros(h_lm.shape)
+        #     return h_lm, jnp.zeros(h_lm.shape)
 
     @staticmethod
     @partial(jax.vmap, in_axes=(None, None, 1))
@@ -500,15 +500,15 @@ class NRSur7dq4Model(eqx.Module):
 
         # TODO need to work out how to vmap this later
         copre_array = []
-        coorb_h_pos = jnp.array(
+        coorb_h_sum = jnp.array(
             []
         )  # TODO this is just to get it to pass the precommit...
         for mode in self.modelist_dict.keys():
             # get the coorb hlms
-            coorb_h_pos, coorb_h_neg = self.get_coorb_hlm(lambdas, mode=mode)
+            coorb_h_sum, coorb_h_diff = self.get_coorb_hlm(lambdas, mode=mode)
 
             # rotate to coprecessing frame
-            print(coorb_h_neg)
+            print(coorb_h_diff)
             # copre_h_pos = coorb_h_pos * jnp.exp(-1j * mode[1] * Omega_interp[:, 4])
             # copre_h_neg = coorb_h_neg * jnp.exp(1j * mode[1] * Omega_interp[:, 4])
 
@@ -521,7 +521,7 @@ class NRSur7dq4Model(eqx.Module):
 
         # sum modes
 
-        return coorb_h_pos  # lambdas, coorb_h_pos
+        return coorb_h_sum  # lambdas, coorb_h_pos
 
         # coeff = jnp.stack(jnp.array(self.get_multi_real_imag(self.mode_no22, params)))
         # modes = eqx.filter_vmap(self.get_mode, in_axes=(0, 0, None))(
