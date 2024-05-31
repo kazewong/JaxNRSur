@@ -278,15 +278,27 @@ class NRSur7dq4DataLoader(eqx.Module):
             )
 
         else:
-            result["real"] = self.read_mode_function(
+            result["real_plus"] = self.read_mode_function(
                 file[f"hCoorb_{mode[0]}_{mode[1]}_real"], n_max
             )
             # result['real_minus'] = 0
             # TODO Make the structure of the m=0 modes similar
             # to hangle in the same way as m != 0
 
-            result["imag"] = self.read_mode_function(
+            result["imag_plus"] = self.read_mode_function(
                 file[f"hCoorb_{mode[0]}_{mode[1]}_imag"], n_max
+            )
+            
+            node_data = {
+                'nodeModelers': {"coefs_0": [0], 'bfOrders_0': [0]},
+                'nodeIndices': [0],
+                'EIBasis': [0],
+            }
+            result["real_minus"] = self.read_mode_function(
+                node_data, 1
+            )
+            result["imag_minus"] = self.read_mode_function(
+                node_data, 1
             )
 
         result["mode"] = mode
