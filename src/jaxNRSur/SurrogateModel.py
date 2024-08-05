@@ -424,19 +424,6 @@ class NRSur7dq4Model(eqx.Module):
 
         return h_lm_plus, h_lm_minus
 
-        # else:
-        #     h_lm = self.construct_hlm_from_bases(
-        #         lambdas,
-        #         self.data.modes[idx]["real"]["predictors"],
-        #         self.data.modes[idx]["real"]["eim_basis"],
-        #     ) + 1j * self.construct_hlm_from_bases(
-        #         lambdas,
-        #         self.data.modes[idx]["imag"]["predictors"],
-        #         self.data.modes[idx]["imag"]["eim_basis"],
-        #     )
-
-        #     return h_lm, jnp.zeros(h_lm.shape)
-
     @staticmethod
     @partial(jax.vmap, in_axes=(None, None, 1))
     def interp_omega(
@@ -502,48 +489,22 @@ class NRSur7dq4Model(eqx.Module):
             jax.vmap(self._get_coorb_params, in_axes=(None, 0))(q, Omega_interp)
         )
 
-        # loop over modes to construct the coprecessing mode array
-
         # TODO need to work out how to vmap this later
-        copre_array = []
-        coorb_h_sum = jnp.array(
-            []
-        )  # TODO this is just to get it to pass the precommit...
         for mode in self.modelist_dict.keys():
             # get the coorb hlms
-            coorb_h_sum, coorb_h_diff = self.get_coorb_hlm(lambdas, mode=mode)
+            coorb_h_lm_plus, coorb_h_lm_minus = self.get_coorb_hlm(lambdas, mode=mode)
 
-            # rotate to coprecessing frame
-            print(coorb_h_diff)
-            # copre_h_pos = coorb_h_pos * jnp.exp(-1j * mode[1] * Omega_interp[:, 4])
-            # copre_h_neg = coorb_h_neg * jnp.exp(1j * mode[1] * Omega_interp[:, 4])
+            # Rotate the hlm in coorbital frame into the coprecessing frame
+            copre_h_lm_plus = coorb_h_lm_plus * jnp.exp(-1j * mode[1] * Omega_interp[:, 4]) 
+            copre_h_lm_minus = coorb_h_lm_minus * jnp.exp(1j * mode[1] * Omega_interp[:, 4])
 
-            # copre_array.append(copre_h_pos)
-            # TODO store the copre
+            # Multiply copressing mode by Wigner-D components (N_modes x times)
+            copre_sum += Wigner_D_matrix_array (N_modes x time) * copre_h_lm_plus (times)
+            copre_sum += Wigner_D_matrix_array (N_modes x time) * copre_h_lm_minus (times)
 
-        copre_array = jnp.array(copre_array)
 
-        # rotate with wigner D matrices
+            # Add to rolling sum of the modes (N_modes x times)
 
-        # sum modes
+        # Sum along the N_modes axis with the spherical harmonics to generate strain as function of time
 
-        return coorb_h_sum  # lambdas, coorb_h_pos
-
-        # coeff = jnp.stack(jnp.array(self.get_multi_real_imag(self.mode_no22, params)))
-        # modes = eqx.filter_vmap(self.get_mode, in_axes=(0, 0, None))(
-        #     coeff[:, 0], coeff[:, 1], time
-        # )
-
-        # waveform = jnp.zeros_like(time, dtype=jnp.complex64)
-
-        # h22 = self.get_22_mode(time, params)
-        # waveform += h22 * \
-        #     SpinWeightedSphericalHarmonics(-2, 2, 2)(theta, phi)
-        # waveform += jnp.conj(h22) * \
-        #     SpinWeightedSphericalHarmonics(-2, 2, -2)(theta, phi)
-
-        # for i, harmonics in enumerate(self.harmonics):
-        #     waveform += modes[i] * harmonics(theta, phi)
-        #     waveform += self.negative_mode_prefactor[i] * jnp.conj(modes[i]) * \
-        #         self.negative_harmonics[i](theta, phi)
-        # return waveform
+        return None # coorb_h_sum  # lambdas, coorb_h_pos
