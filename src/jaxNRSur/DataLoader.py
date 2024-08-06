@@ -269,12 +269,11 @@ class NRSur7dq4DataLoader(eqx.Module):
             result["imag_plus"] = self.read_mode_function(
                 file[f"hCoorb_{mode[0]}_{mode[1]}_Im+"], n_max
             )
-        elif mode[1] < 0:
             result["real_minus"] = self.read_mode_function(
-                file[f"hCoorb_{mode[0]}_{-mode[1]}_Re-"], n_max
+                file[f"hCoorb_{mode[0]}_{mode[1]}_Re-"], n_max
             )
             result["imag_minus"] = self.read_mode_function(
-                file[f"hCoorb_{mode[0]}_{-mode[1]}_Im-"], n_max
+                file[f"hCoorb_{mode[0]}_{mode[1]}_Im-"], n_max
             )
         else:
             result["real_plus"] = self.read_mode_function(
@@ -289,7 +288,7 @@ class NRSur7dq4DataLoader(eqx.Module):
             )
             
             node_data = {
-                'nodeModelers': {"coefs_0": jnp.array([0]), 'bfOrders_0': jnp.zeros((0,0))},
+                'nodeModelers': {"coefs_0": jnp.array([0]), 'bfOrders_0': jnp.zeros((0,7))},
                 'nodeIndices': jnp.array([0]),
                 'EIBasis': jnp.array([0]),
             }
