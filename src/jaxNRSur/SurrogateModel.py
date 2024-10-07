@@ -13,7 +13,7 @@ jax.config.update("jax_enable_x64", True)
 
 
 def comb(N, k):
-  return jnp.exp(gammaln(N + 1) - gammaln(k + 1) - gammaln(N - k + 1))
+    return jnp.exp(gammaln(N + 1) - gammaln(k + 1) - gammaln(N - k + 1))
 
 
 def get_T3_phase(q: float, t: Float[Array, " n"], t_ref: float = 1000.0) -> float:
@@ -263,7 +263,6 @@ class NRSur7dq4Model(eqx.Module):
         self.n_modes_extended = len(self.modelist_dict_extended.keys())
 
         for mode in list(self.modelist_dict_extended.keys()):
-            # TODO: m=0 case gets duplicated! handle with care elsewhere
             self.harmonics.append(SpinWeightedSphericalHarmonics(-2, mode[0], mode[1]))
 
     def _get_coorb_params(
@@ -293,6 +292,11 @@ class NRSur7dq4Model(eqx.Module):
         fit_params = jnp.zeros(params.shape)
 
         q = params[0]
+
+        # Transforming log(q) such that it is bounded between [-1, 1], values takes from the NRSur7dq4 code
+        q_fit_offset = -0.9857019407834238
+        q_fit_slope = 1.4298059216576398
+
         eta = q / (1 + q) ** 2
         chi_wtAvg = (q * params[3] + params[6]) / (1 + q)
         chi_hat = (chi_wtAvg - 38.0 * eta / 113.0 * (params[3] + params[6])) / (
@@ -301,7 +305,7 @@ class NRSur7dq4Model(eqx.Module):
 
         chi_a = (params[3] - params[6]) / 2
 
-        fit_params = fit_params.at[0].set(jnp.log(q))
+        fit_params = fit_params.at[0].set(q_fit_offset + q_fit_slope*jnp.log(q))
         fit_params = fit_params.at[1:3].set(params[1:3])
         fit_params = fit_params.at[3].set(chi_hat)
         fit_params = fit_params.at[4:6].set(params[4:6])
@@ -439,8 +443,10 @@ class NRSur7dq4Model(eqx.Module):
         # NOTE: factor of 2?
         # also, in m=0 case sum = diff currently
         # but it used to be zero
-        h_lm_plus = (h_lm_sum + jnp.conj(h_lm_diff)) / 2
-        h_lm_minus = (h_lm_sum - jnp.conj(h_lm_diff)) / 2
+        # NOTE: Ethan (10/6/24), changing this code following: 
+        # https://github.com/sxs-collaboration/gwsurrogate/blob/55dfadb9e62de0f1ae0c9d69c72e49b00a760d85/gwsurrogate/new/precessing_surrogate.py#L714
+        h_lm_plus = jnp.conj(h_lm_sum - h_lm_diff) #(h_lm_sum + jnp.conj(h_lm_diff)) / 2
+        h_lm_minus = h_lm_sum + h_lm_diff #(h_lm_sum - jnp.conj(h_lm_diff)) / 2
 
         return h_lm_plus, h_lm_minus
 
@@ -462,42 +468,52 @@ class NRSur7dq4Model(eqx.Module):
 
     def wigner_d_coefficients(
         self, 
-        quat: Float[Array, " n_quat n_sample"], 
+        quat: Float[Array, " n_quat n_sample"],
+        orbphase: Float[Array, "n_sample"],
         mode: tuple
         ) -> Float[Array, " n_modes n_sample"]:
 
+        # First rotate the quaternion as well
+        quat_rot = jnp.array([jnp.cos(orbphase / 2.), 0. * orbphase, 0. * orbphase, jnp.sin(orbphase / 2.)]).T
+        quat_full = self.multiply_quats(quat, quat_rot).T
+
         # Need to invert the quaternions
-        q_conj = -quat
+        q_conj = -quat_full
         q_conj = q_conj.at[:,0].set(-q_conj[:,0])
 
-        quat_inv = (q_conj.T/self.multiply_quats(quat, q_conj)[0]).T
+        quat_inv = (q_conj.T/self.multiply_quats(quat_full, q_conj)[0]).T
 
         # Construct the rotations
-        R_A = quat_inv[:,0] + + 1j * quat_inv[:,3]
-        R_B = quat_inv[:,2] + + 1j * quat_inv[:,1]
+        R_A = quat_inv[:,0] + 1j * quat_inv[:,3]
+        R_B = quat_inv[:,2] + 1j * quat_inv[:,1]
 
         abs_R_ratio = jnp.abs(R_B)/jnp.abs(R_A)
 
-        R_A_small = (jnp.abs(R_A) < 1e-12)
-        R_B_small = (jnp.abs(R_B) < 1e-12)
+        R_A_small = (jnp.abs(R_A) < 1e-8)
+        R_B_small = (jnp.abs(R_B) < 1e-8)
 
-        i1 = jnp.where((1-R_A_small)*(1-R_B_small))
+        i1 = jnp.where((1-R_A_small) * (1-R_B_small))
         i2 = jnp.where(R_A_small)
-        i3 = jnp.where(R_B_small)
+        i3 = jnp.where((1-R_A_small) * R_B_small)
 
         matrix_coefs = jnp.zeros((quat_inv.shape[0],  self.n_modes_extended), dtype=complex)
         
         # Handling the if statements, additionally using. a Dirac delta to ensure the ells match
         ell, m = mode
         for (ell_p, m_p), i in self.modelist_dict_extended.items():
-            
-            
-            matrix_coefs = matrix_coefs.at[i2, i].set(float(jnp.isclose(ell_p, ell)) * float(jnp.isclose(m_p, -m)) * R_B[i2] ** (2 * m) * (-1) ** (ell + m))
+
+            matrix_coefs = matrix_coefs.at[i2, i].set(float(jnp.isclose(ell_p, ell)) * float(jnp.isclose(m_p, -m)) * R_B[i2] ** (2 * m) * (-1) ** (ell + m - 1))
             matrix_coefs = matrix_coefs.at[i3, i].set(float(jnp.isclose(ell_p, ell)) * float(jnp.isclose(m_p, m)) * R_A[i3] ** (2 * m))
 
-            factor = jnp.abs(R_A[i1]) ** (2*ell - 2*m) * R_A[i1] ** (m + m_p)  * R_B[i1] ** (m - m_p) * jnp.sqrt((factorial(ell+m)*(factorial(ell-m)))/(factorial(ell+m_p)*(factorial(ell-m_p))))
-            summation = jnp.sum(jnp.array([(-1)**rho * comb(ell + m_p, rho) * comb(ell - m_p, ell - rho - m) * abs_R_ratio[i1]**(2*rho) for rho in range(max(0, m_p - m), min(ell + m_p, ell - m)+1)]),axis=0)
+            factor = jnp.abs(R_A[i1]) ** (2*ell - 2*m) * R_A[i1] ** (m + m_p)  * R_B[i1] ** (m - m_p) * \
+                jnp.sqrt((factorial(ell+m)*(factorial(ell-m)))/(factorial(ell+m_p)*(factorial(ell-m_p))))
+            summation = jnp.sum(jnp.array([(-1)**rho * comb(ell + m_p, rho) * comb(ell - m_p, ell - rho - m) * 
+                abs_R_ratio[i1]**(2*rho) for rho in range(max(0, m_p - m), min(ell + m_p, ell - m)+1)]),axis=0)
+            
             matrix_coefs = matrix_coefs.at[i1, i].set(float(jnp.isclose(ell_p, ell)) * factor*summation)
+
+        # Check the gradient of this (masking out nans)
+        matrix_coefs = matrix_coefs.at[jnp.isnan(matrix_coefs)].set(0.0)
 
         return matrix_coefs
 
@@ -510,7 +526,7 @@ class NRSur7dq4Model(eqx.Module):
         # quaternions
         init_quat: Float[Array, " n_quat"] = jnp.array([1.0, 0.0, 0.0, 0.0]),
         init_orb_phase: float = 0.0,
-    ) -> Float[Array, " n_sample"]:
+    ) -> tuple((Float[Array, " n_sample"], Float[Array, " n_sample"])):
         # TODO set up the appropriate t_low etc
 
         # Initialize Omega with structure:
@@ -549,7 +565,6 @@ class NRSur7dq4Model(eqx.Module):
         Omega = jnp.concatenate([Omega_0[None], Omega], axis=0)
 
         # Interpolating to the coorbital time array
-        # Omega_interp = jnp.zeros((len(self.data.t_coorb), len(Omega_0)))
         Omega_interp = self.interp_omega(self.data.t_ds, self.data.t_coorb, Omega).T
 
         # Get the lambda parameters to go into the waveform calculation
@@ -558,20 +573,20 @@ class NRSur7dq4Model(eqx.Module):
         )
 
         # TODO need to work out how to vmap this later
-        inertial_h_lms = jnp.zeros((lambdas.shape[0], self.n_modes_extended), dtype=complex)
+        inertial_h_lms = jnp.zeros((len(self.data.t_coorb), self.n_modes_extended), dtype=complex)
 
         for mode in self.modelist_dict.keys():
             # get the coorb hlms
             coorb_h_lm_plus, coorb_h_lm_minus = self.get_coorb_hlm(lambdas, mode=mode)
 
-            # Rotate the hlm in coorbital frame into the coprecessing frame
-            copre_h_lm_plus = coorb_h_lm_plus * jnp.exp(-1j * mode[1] * Omega_interp[:, 4])
-            copre_h_lm_minus = coorb_h_lm_minus * jnp.exp(1j * mode[1] * Omega_interp[:, 4])
-
             # Multiply copressing mode by Wigner-D components (N_modes x times)
-            inertial_h_lms += (self.wigner_d_coefficients(Omega_interp[:,:4], mode).T * copre_h_lm_plus).T
-            inertial_h_lms += (self.wigner_d_coefficients(Omega_interp[:,:4], (mode[0], -mode[1])).T * copre_h_lm_minus).T
+            # Note that this also does the rotation of the quaternions into the inertial frame
+            inertial_h_lms += (self.wigner_d_coefficients(Omega_interp[:,:4], Omega_interp[:,4], mode).T * coorb_h_lm_plus).T
+            inertial_h_lms += (self.wigner_d_coefficients(Omega_interp[:,:4], Omega_interp[:,4], (mode[0], -mode[1])).T * coorb_h_lm_minus).T
 
         # Sum along the N_modes axis with the spherical harmonics to generate strain as function of time
+        inertial_h = jnp.zeros(len(self.data.t_coorb), dtype=complex)
+        for idx in self.modelist_dict_extended.values():
+            inertial_h += self.harmonics[idx](theta, phi) * inertial_h_lms[:,idx]
 
-        return inertial_h_lms
+        return inertial_h, Omega_interp

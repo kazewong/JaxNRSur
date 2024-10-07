@@ -31,7 +31,6 @@ class PolyPredictor(eqx.Module):
         coefs: Float[Array, " n_sum"],
         bfOrders: Float[Array, " n_sum n_lambda"],
     ) -> Float[Array, " 1"]:
-        # TODO: Check this Ethan
         return jnp.dot(
             coefs,
             jnp.prod(
