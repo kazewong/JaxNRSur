@@ -446,7 +446,7 @@ class NRSur7dq4Model(eqx.Module):
         # NOTE: Ethan (10/6/24), changing this code following: 
         # https://github.com/sxs-collaboration/gwsurrogate/blob/55dfadb9e62de0f1ae0c9d69c72e49b00a760d85/gwsurrogate/new/precessing_surrogate.py#L714
         h_lm_plus = jnp.conj(h_lm_sum - h_lm_diff) #(h_lm_sum + jnp.conj(h_lm_diff)) / 2
-        h_lm_minus = h_lm_sum + h_lm_diff #(h_lm_sum - jnp.conj(h_lm_diff)) / 2
+        h_lm_minus = (h_lm_sum + h_lm_diff)*(jnp.abs(h_lm_diff) > 1e-12) #(h_lm_sum - jnp.conj(h_lm_diff)) / 2
 
         return h_lm_plus, h_lm_minus
 
@@ -489,8 +489,8 @@ class NRSur7dq4Model(eqx.Module):
 
         abs_R_ratio = jnp.abs(R_B)/jnp.abs(R_A)
 
-        R_A_small = (jnp.abs(R_A) < 1e-8)
-        R_B_small = (jnp.abs(R_B) < 1e-8)
+        R_A_small = (jnp.abs(R_A) < 1e-12)
+        R_B_small = (jnp.abs(R_B) < 1e-12)
 
         i1 = jnp.where((1-R_A_small) * (1-R_B_small))
         i2 = jnp.where(R_A_small)
@@ -502,15 +502,15 @@ class NRSur7dq4Model(eqx.Module):
         ell, m = mode
         for (ell_p, m_p), i in self.modelist_dict_extended.items():
 
-            matrix_coefs = matrix_coefs.at[i2, i].set(float(jnp.isclose(ell_p, ell)) * float(jnp.isclose(m_p, -m)) * R_B[i2] ** (2 * m) * (-1) ** (ell + m - 1))
-            matrix_coefs = matrix_coefs.at[i3, i].set(float(jnp.isclose(ell_p, ell)) * float(jnp.isclose(m_p, m)) * R_A[i3] ** (2 * m))
+            matrix_coefs = matrix_coefs.at[i2, i].set(float(ell_p == ell) * float(m_p == -m) * R_B[i2] ** (2 * m) * (-1) ** (ell + m - 1))
+            matrix_coefs = matrix_coefs.at[i3, i].set(float(ell_p == ell) * float(m_p == m) * R_A[i3] ** (2 * m))
 
             factor = jnp.abs(R_A[i1]) ** (2*ell - 2*m) * R_A[i1] ** (m + m_p)  * R_B[i1] ** (m - m_p) * \
                 jnp.sqrt((factorial(ell+m)*(factorial(ell-m)))/(factorial(ell+m_p)*(factorial(ell-m_p))))
             summation = jnp.sum(jnp.array([(-1)**rho * comb(ell + m_p, rho) * comb(ell - m_p, ell - rho - m) * 
                 abs_R_ratio[i1]**(2*rho) for rho in range(max(0, m_p - m), min(ell + m_p, ell - m)+1)]),axis=0)
             
-            matrix_coefs = matrix_coefs.at[i1, i].set(float(jnp.isclose(ell_p, ell)) * factor*summation)
+            matrix_coefs = matrix_coefs.at[i1, i].set(float(ell_p == ell) * factor * summation)
 
         # Check the gradient of this (masking out nans)
         matrix_coefs = matrix_coefs.at[jnp.isnan(matrix_coefs)].set(0.0)
@@ -566,6 +566,9 @@ class NRSur7dq4Model(eqx.Module):
 
         # Interpolating to the coorbital time array
         Omega_interp = self.interp_omega(self.data.t_ds, self.data.t_coorb, Omega).T
+
+        # Normalizing the quaternions after interpolation
+        Omega_interp = Omega_interp.at[:,:4].set((Omega_interp[:,:4].T/(jnp.sqrt(jnp.sum(jnp.abs(Omega_interp[:,:4])**2, axis=1)) +1.e-12)).T)
 
         # Get the lambda parameters to go into the waveform calculation
         lambdas = jax.vmap(self._get_fit_params)(
