@@ -258,6 +258,7 @@ class NRSur7dq4DataLoader(eqx.Module):
             jnp.array(coefs), jnp.array(bfOrders), n_max
         )
         result["eim_basis"] = jnp.array(node_data["EIBasis"])
+        result['node_indices'] = jnp.array(node_data["nodeIndices"])
         return result
 
     def read_single_mode(self, file: dict, mode: tuple[int, int], n_max: int) -> dict:

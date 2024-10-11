@@ -5,7 +5,7 @@ from jax.scipy.special import factorial, gammaln
 from jaxNRSur.Spline import CubicSpline
 from jaxNRSur.DataLoader import NRHybSur3dq8DataLoader, NRSur7dq4DataLoader
 from jaxNRSur.Harmonics import SpinWeightedSphericalHarmonics
-from jaxNRSur.PolyPredictor import PolyPredictor, evaluate_ensemble
+from jaxNRSur.PolyPredictor import PolyPredictor, evaluate_ensemble, evaluate_ensemble_dynamics
 from jaxtyping import Array, Float, Int
 import equinox as eqx
 
@@ -332,7 +332,7 @@ class NRSur7dq4Model(eqx.Module):
             omega_fit,
             omega_orb_0_fit,
             omega_orb_1_fit,
-        ) = evaluate_ensemble(
+        ) = evaluate_ensemble_dynamics(
             predictor, fit_params
         )  # TODO check this
 
@@ -406,11 +406,8 @@ class NRSur7dq4Model(eqx.Module):
         predictor: PolyPredictor,
         eim_basis: Float[Array, " n_nodes n_sample"],
     ) -> Float[Array, " n_sample"]:
-        return jnp.sum(
-            jax.vmap(evaluate_ensemble, in_axes=(None, 0))(predictor, lambdas).T
-            * eim_basis,
-            axis=0,
-        )
+
+        return jnp.dot(evaluate_ensemble(predictor, lambdas), eim_basis)
 
     def get_coorb_hlm(self, lambdas, mode=(2, 2)):
 
@@ -420,21 +417,21 @@ class NRSur7dq4Model(eqx.Module):
         # the file)
         idx = self.modelist_dict[mode]
         h_lm_sum = self.construct_hlm_from_bases(
-            lambdas,
+            lambdas[self.data.modes[idx]["real_plus"]["node_indices"]],
             self.data.modes[idx]["real_plus"]["predictors"],
             self.data.modes[idx]["real_plus"]["eim_basis"],
         ) + 1j * self.construct_hlm_from_bases(
-            lambdas,
+            lambdas[self.data.modes[idx]["imag_plus"]["node_indices"]],
             self.data.modes[idx]["imag_plus"]["predictors"],
             self.data.modes[idx]["imag_plus"]["eim_basis"],
         )
 
         h_lm_diff = self.construct_hlm_from_bases(
-            lambdas,
+            lambdas[self.data.modes[idx]["real_minus"]["node_indices"]],
             self.data.modes[idx]["real_minus"]["predictors"],
             self.data.modes[idx]["real_minus"]["eim_basis"],
         ) + 1j * self.construct_hlm_from_bases(
-            lambdas,
+            lambdas[self.data.modes[idx]["imag_minus"]["node_indices"]],
             self.data.modes[idx]["imag_minus"]["predictors"],
             self.data.modes[idx]["imag_minus"]["eim_basis"],
         )
