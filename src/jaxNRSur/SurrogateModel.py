@@ -587,6 +587,7 @@ class NRSur7dq4Model(eqx.Module):
         # Sum along the N_modes axis with the spherical harmonics to generate strain as function of time
         inertial_h = jnp.zeros(len(self.data.t_coorb), dtype=complex)
         for idx in self.modelist_dict_extended.values():
-            inertial_h += self.harmonics[idx](theta, phi) * inertial_h_lms[:,idx]
+            # Note the LAL convention for the phasing
+            inertial_h += self.harmonics[idx](theta, jnp.pi/2 - phi) * inertial_h_lms[:,idx]
 
         return inertial_h, Omega_interp

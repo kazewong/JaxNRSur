@@ -63,39 +63,45 @@ class SpinWeightedSphericalHarmonics(eqx.Module):
     s_mode: int
     l_mode: int
     m_mode: int
+    mm_mode: int
 
     def __init__(
         self,
         s_mode: int,
         l_mode: int,
-        m_mode: int,
+        m_mode: int
     ) -> None:
         Pm = 1.0
 
-        if l_mode < 0:
+        l = l_mode
+        m = m_mode
+        s = s_mode
+
+        if l < 0:
             raise ValueError("l must be non-negative")
-        if abs(m_mode) > l_mode or l_mode < abs(s_mode):
+        if abs(m) > l or l < abs(s):
             raise ValueError("l must be greater than or equal to |s| and |m|")
 
         if abs(m_mode) < abs(s_mode):
-            s_mode = m_mode
-            m_mode = s_mode
-            if (m_mode + s_mode) % 2:
+            s = m_mode
+            m = s_mode
+            if (m + s) % 2:
                 Pm = -Pm
 
-        if m_mode < 0:
-            s_mode = -s_mode
-            m_mode = -m_mode
-            if (m_mode + s_mode) % 2:
+        if m < 0:
+            s = -s
+            m = -m
+            if (m + s) % 2:
                 Pm = -Pm
 
         self.Pm_coeff = Pm
-        self.s_mode = s_mode
-        self.l_mode = l_mode
-        self.m_mode = m_mode
+        self.s_mode = s
+        self.l_mode = l
+        self.m_mode = m
+        self.mm_mode = m_mode
 
     def __call__(self, theta: float, phi: float) -> Float[Array, " 1"]:
-        result = self.Pm_coeff * s_lambda_lm(
+        result = s_lambda_lm(
             self.s_mode, self.l_mode, self.m_mode, jnp.cos(theta)
         )
-        return result * jnp.exp(1j * self.m_mode * phi)
+        return self.Pm_coeff * result * jnp.exp(1j * self.mm_mode * phi)
