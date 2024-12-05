@@ -313,7 +313,7 @@ class NRSur7dq4Model(eqx.Module):
 
         return fit_params
 
-    def get_Omega_derivative_from_index(
+    def get_Omega_derivative(
         self,
         Omega_i: Float[Array, " n_Omega"],
         q: Float,
@@ -334,7 +334,66 @@ class NRSur7dq4Model(eqx.Module):
             omega_orb_1_fit,
         ) = evaluate_ensemble_dynamics(
             predictor, fit_params
-        )  # TODO check this
+        )
+
+        # Converting to dOmega_dt array
+        dOmega_dt = jnp.zeros(len(Omega_i))
+
+        sp = jnp.sin(Omega_i[4])
+        cp = jnp.cos(Omega_i[4])
+
+        omega_orb_x = omega_orb_0_fit * cp - omega_orb_1_fit * sp
+        omega_orb_y = omega_orb_0_fit * sp + omega_orb_1_fit * cp
+
+        # Quaterion derivative
+        dOmega_dt = dOmega_dt.at[0].set(
+            -0.5 * Omega_i[1] * omega_orb_x - 0.5 * Omega_i[2] * omega_orb_y
+        )
+        dOmega_dt = dOmega_dt.at[1].set(
+            -0.5 * Omega_i[3] * omega_orb_y + 0.5 * Omega_i[0] * omega_orb_x
+        )
+        dOmega_dt = dOmega_dt.at[2].set(
+            0.5 * Omega_i[3] * omega_orb_x + 0.5 * Omega_i[0] * omega_orb_y
+        )
+        dOmega_dt = dOmega_dt.at[3].set(
+            0.5 * Omega_i[1] * omega_orb_y - 0.5 * Omega_i[2] * omega_orb_x
+        )
+
+        # orbital phase derivative
+        dOmega_dt = dOmega_dt.at[4].set(omega_fit)
+
+        # Spin derivatives
+        dOmega_dt = dOmega_dt.at[5].set(chiA_0_fit * cp - chiA_1_fit * sp)
+        dOmega_dt = dOmega_dt.at[6].set(chiA_0_fit * sp + chiA_1_fit * cp)
+        dOmega_dt = dOmega_dt.at[7].set(chiA_2_fit)
+
+        dOmega_dt = dOmega_dt.at[8].set(chiB_0_fit * cp - chiB_1_fit * sp)
+        dOmega_dt = dOmega_dt.at[9].set(chiB_0_fit * sp + chiB_1_fit * cp)
+        dOmega_dt = dOmega_dt.at[10].set(chiB_2_fit)
+
+        return dOmega_dt
+
+    def get_Omega_derivative_from_index(
+        self,
+        Omega_i: Float[Array, " n_Omega"],
+        q: Float,
+        predictor: PolyPredictor,
+        index: int
+    ) -> Float[Array, " n_Omega"]:
+        coorb_x = self._get_coorb_params(q, Omega_i)
+        fit_params = self._get_fit_params(coorb_x)
+
+        (
+            chiA_0_fit,
+            chiA_1_fit,
+            chiA_2_fit,
+            chiB_0_fit,
+            chiB_1_fit,
+            chiB_2_fit,
+            omega_fit,
+            omega_orb_0_fit,
+            omega_orb_1_fit,
+        ) = [predictor.predict_at_index(fit_params, predictor.coefs[i], predictor.bfOrders[i], index) for i in range(9)]
 
         # Converting to dOmega_dt array
         dOmega_dt = jnp.zeros(len(Omega_i))
@@ -380,8 +439,22 @@ class NRSur7dq4Model(eqx.Module):
         predictor: PolyPredictor,
         dt: Float,
     ) -> Float[Array, " n_Omega"]:
-        dOmega_dt = self.get_Omega_derivative_from_index(Omega_i, q, predictor)
+        dOmega_dt = self.get_Omega_derivative(Omega_i, q, predictor)
         return Omega_i + dOmega_dt * dt
+
+    def forward_RK4(
+        self,
+        q: Float,
+        Omega_i: Float[Array, " n_Omega"],
+        predictor: PolyPredictor,
+        dt: Float,
+    ) -> Float[Array, " n_Omega"]:
+
+        k1 = self.get_Omega_derivative_from_index(Omega_i, q, predictor, )
+        k2 = self.get_Omega_derivative_from_index(Omega_i, q, predictor, )
+
+
+        return None
 
     def normalize_Omega(
         self, Omega: Float[Array, " n_Omega"], normA: float, normB: float
@@ -442,8 +515,8 @@ class NRSur7dq4Model(eqx.Module):
         # but it used to be zero
         # NOTE: Ethan (10/6/24), changing this code following: 
         # https://github.com/sxs-collaboration/gwsurrogate/blob/55dfadb9e62de0f1ae0c9d69c72e49b00a760d85/gwsurrogate/new/precessing_surrogate.py#L714
-        h_lm_plus = jnp.conj(h_lm_sum - h_lm_diff)*(jnp.abs(h_lm_diff) > 1e-12) + h_lm_sum*(jnp.abs(h_lm_diff) < 1e-12) #(h_lm_sum + jnp.conj(h_lm_diff)) / 2
-        h_lm_minus = (h_lm_sum + h_lm_diff)*(jnp.abs(h_lm_diff) > 1e-12) #(h_lm_sum - jnp.conj(h_lm_diff)) / 2
+        h_lm_plus = jnp.conj(h_lm_sum - h_lm_diff)*(jnp.abs(h_lm_diff) > 1e-12) + h_lm_sum*(jnp.abs(h_lm_diff) < 1e-12) 
+        h_lm_minus = (h_lm_sum + h_lm_diff)*(jnp.abs(h_lm_diff) > 1e-12) 
 
         return h_lm_plus, h_lm_minus
 
@@ -535,11 +608,33 @@ class NRSur7dq4Model(eqx.Module):
         normA = jnp.linalg.norm(params[1:4])
         normB = jnp.linalg.norm(params[4:7])
 
-        init_state = (Omega_0, q, normA, normB)
-
         predictors_parameters, n_max = eqx.partition(self.data.coorb, eqx.is_array)
+        predictor = eqx.combine(predictors_parameters, n_max)
         dt = self.data.diff_t_ds
 
+        k_ab4 = jnp.zeros((3, 11))
+        dt_ab4 = jnp.zeros((3, 11))
+
+        Omega_ab4 = jnp.zeros((4, 11))
+        Omega_ab4 = Omega_ab4.at[0].set(Omega_0)
+
+        # Iterating forward to every second step because we need the intermediate steps to evaluate RK4
+        # This is a result of the PolyPredictor being defined on a fixed dynamical timescale grid
+        for i, dt in enumerate(self.data.diff_t_ds[:6:2]):
+
+            k1 = self.get_Omega_derivative_from_index(Omega_ab4[i], q, predictor, 2*i)
+            k2 = self.get_Omega_derivative_from_index(Omega_ab4[i] + k1 * dt, q, predictor, 2*i+1)
+            k3 = self.get_Omega_derivative_from_index(Omega_ab4[i] + k2 * dt, q, predictor, 2*i+1)
+            k4 = self.get_Omega_derivative_from_index(Omega_ab4[i] + k3 * 2*dt, q, predictor, 2*i+2)
+
+            Omega_next = Omega_ab4[i] + (dt/3) * (k1 + 2*k2 + 2*k3 + k4)
+            
+            Omega_ab4 = Omega_ab4.at[i+1].set(self.normalize_Omega(Omega_next, normA, normB))
+            k_ab4 = k_ab4.at[i].set(k1)
+            dt_ab4 = dt_ab4.at[i].set(2*dt)
+
+        # TODO Ethan - up to here when swapping out for the AB4 method
+        init_state = (Omega_0, q, normA, normB)
         extras = (predictors_parameters, dt)
 
         def timestepping_kernel(
@@ -550,7 +645,6 @@ class NRSur7dq4Model(eqx.Module):
         ]:
             Omega, q, normA, normB = carry
             predictors_parameters, dt = data
-            predictor = eqx.combine(predictors_parameters, n_max)
             Omega = self.normalize_Omega(
                 self.forward_euler(q, Omega, predictor, dt), normA, normB
             )
