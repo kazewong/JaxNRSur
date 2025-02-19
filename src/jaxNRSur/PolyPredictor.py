@@ -38,25 +38,12 @@ class PolyPredictor(eqx.Module):
                 axis=1,
             ),
         )
-    
-    @jaxtyped
-    @staticmethod
-    def predict_at_index(
-        inputs: Float[Array, " n_lambda"],
-        coefs: Float[Array, " n_sum"],
-        bfOrders: Float[Array, " n_sum n_lambda"],
-        index: int
-    ) -> Float[Array, " 1"]:
-        return jnp.dot(
-            coefs[index],
-            jnp.prod(
-                jnp.power(inputs, bfOrders[index]),
-                axis=1,
-            ),
-        )
 
     def __call__(self, X: Float[Array, " n_lambda "]) -> Float[Array, " 1"]:
         return self.predict(X, self.coefs, self.bfOrders)
+    
+    def predict_at_index(self, X: Float[Array, " n_lambda "], idx: Int) -> Float[Array, " 1"]:
+        return self.predict(X, self.coefs[idx], self.bfOrders[idx])
 
     @property
     def n_nodes(self) -> int:

@@ -393,7 +393,7 @@ class NRSur7dq4Model(eqx.Module):
             omega_fit,
             omega_orb_0_fit,
             omega_orb_1_fit,
-        ) = [predictor.predict_at_index(fit_params, predictor.coefs[i], predictor.bfOrders[i], index) for i in range(9)]
+        ) = [predictor.predict_at_index(fit_params, index) for i in range(9)]
 
         # Converting to dOmega_dt array
         dOmega_dt = jnp.zeros(len(Omega_i))
@@ -453,7 +453,7 @@ class NRSur7dq4Model(eqx.Module):
         k1 = self.get_Omega_derivative_from_index(Omega_i, q, predictor, )
         k2 = self.get_Omega_derivative_from_index(Omega_i, q, predictor, )
 
-
+        # TODO
         return None
 
     def normalize_Omega(
@@ -609,29 +609,28 @@ class NRSur7dq4Model(eqx.Module):
         normB = jnp.linalg.norm(params[4:7])
 
         predictors_parameters, n_max = eqx.partition(self.data.coorb, eqx.is_array)
-        predictor = eqx.combine(predictors_parameters, n_max)
         dt = self.data.diff_t_ds
 
-        k_ab4 = jnp.zeros((3, 11))
-        dt_ab4 = jnp.zeros((3, 11))
+        # k_ab4 = jnp.zeros((3, 11))
+        # dt_ab4 = jnp.zeros((3, 11))
 
-        Omega_ab4 = jnp.zeros((4, 11))
-        Omega_ab4 = Omega_ab4.at[0].set(Omega_0)
+        # Omega_ab4 = jnp.zeros((4, 11))
+        # Omega_ab4 = Omega_ab4.at[0].set(Omega_0)
 
-        # Iterating forward to every second step because we need the intermediate steps to evaluate RK4
-        # This is a result of the PolyPredictor being defined on a fixed dynamical timescale grid
-        for i, dt in enumerate(self.data.diff_t_ds[:6:2]):
+        # # Iterating forward to every second step because we need the intermediate steps to evaluate RK4
+        # # This is a result of the PolyPredictor being defined on a fixed dynamical timescale grid
+        # for i, dt in enumerate(self.data.diff_t_ds[:6:2]):
 
-            k1 = self.get_Omega_derivative_from_index(Omega_ab4[i], q, predictor, 2*i)
-            k2 = self.get_Omega_derivative_from_index(Omega_ab4[i] + k1 * dt, q, predictor, 2*i+1)
-            k3 = self.get_Omega_derivative_from_index(Omega_ab4[i] + k2 * dt, q, predictor, 2*i+1)
-            k4 = self.get_Omega_derivative_from_index(Omega_ab4[i] + k3 * 2*dt, q, predictor, 2*i+2)
+        #     k1 = self.get_Omega_derivative_from_index(Omega_ab4[i], q, predictor, 2*i)
+        #     k2 = self.get_Omega_derivative_from_index(Omega_ab4[i] + k1 * dt, q, predictor, 2*i+1)
+        #     k3 = self.get_Omega_derivative_from_index(Omega_ab4[i] + k2 * dt, q, predictor, 2*i+1)
+        #     k4 = self.get_Omega_derivative_from_index(Omega_ab4[i] + k3 * 2*dt, q, predictor, 2*i+2)
 
-            Omega_next = Omega_ab4[i] + (dt/3) * (k1 + 2*k2 + 2*k3 + k4)
+        #     Omega_next = Omega_ab4[i] + (dt/3) * (k1 + 2*k2 + 2*k3 + k4)
             
-            Omega_ab4 = Omega_ab4.at[i+1].set(self.normalize_Omega(Omega_next, normA, normB))
-            k_ab4 = k_ab4.at[i].set(k1)
-            dt_ab4 = dt_ab4.at[i].set(2*dt)
+        #     Omega_ab4 = Omega_ab4.at[i+1].set(self.normalize_Omega(Omega_next, normA, normB))
+        #     k_ab4 = k_ab4.at[i].set(k1)
+        #     dt_ab4 = dt_ab4.at[i].set(2*dt)
 
         # TODO Ethan - up to here when swapping out for the AB4 method
         init_state = (Omega_0, q, normA, normB)
@@ -645,6 +644,7 @@ class NRSur7dq4Model(eqx.Module):
         ]:
             Omega, q, normA, normB = carry
             predictors_parameters, dt = data
+            predictor = eqx.combine(predictors_parameters, n_max)
             Omega = self.normalize_Omega(
                 self.forward_euler(q, Omega, predictor, dt), normA, normB
             )
