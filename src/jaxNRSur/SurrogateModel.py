@@ -611,49 +611,63 @@ class NRSur7dq4Model(eqx.Module):
         predictors_parameters, n_max = eqx.partition(self.data.coorb, eqx.is_array)
         dt = self.data.diff_t_ds
 
-        # k_ab4 = jnp.zeros((3, 11))
-        # dt_ab4 = jnp.zeros((3, 11))
-
-        # Omega_ab4 = jnp.zeros((4, 11))
-        # Omega_ab4 = Omega_ab4.at[0].set(Omega_0)
-
-        # # Iterating forward to every second step because we need the intermediate steps to evaluate RK4
-        # # This is a result of the PolyPredictor being defined on a fixed dynamical timescale grid
-        # for i, dt in enumerate(self.data.diff_t_ds[:6:2]):
-
-        #     k1 = self.get_Omega_derivative_from_index(Omega_ab4[i], q, predictor, 2*i)
-        #     k2 = self.get_Omega_derivative_from_index(Omega_ab4[i] + k1 * dt, q, predictor, 2*i+1)
-        #     k3 = self.get_Omega_derivative_from_index(Omega_ab4[i] + k2 * dt, q, predictor, 2*i+1)
-        #     k4 = self.get_Omega_derivative_from_index(Omega_ab4[i] + k3 * 2*dt, q, predictor, 2*i+2)
-
-        #     Omega_next = Omega_ab4[i] + (dt/3) * (k1 + 2*k2 + 2*k3 + k4)
-            
-        #     Omega_ab4 = Omega_ab4.at[i+1].set(self.normalize_Omega(Omega_next, normA, normB))
-        #     k_ab4 = k_ab4.at[i].set(k1)
-        #     dt_ab4 = dt_ab4.at[i].set(2*dt)
-
-        # TODO Ethan - up to here when swapping out for the AB4 method
+        # TODO start construction zone
+        # Start the timestepping process
         init_state = (Omega_0, q, normA, normB)
         extras = (predictors_parameters, dt)
 
+        # RK4 for n_steps
+        n_steps = 3
+        k_ab4 = jnp.zeros((n_steps, 11))
+        dt_ab4 = jnp.zeros(n_steps)
+
+        Omega_ab4 = jnp.zeros((n_steps+1, 11))
+        Omega_ab4 = Omega_ab4.at[0].set(Omega_0)
+        
+        predictor = eqx.combine(predictors_parameters, n_max)
+
+        # Iterating forward to every second step because we need the intermediate steps to evaluate RK4
+        # This is a result of the PolyPredictor being defined on a fixed dynamical timescale grid
+        for i, dt in enumerate(self.data.diff_t_ds[:2 * n_steps:2]):
+            
+            # TODO check with Vijay about non-uniform dt
+            k1 = self.get_Omega_derivative_from_index(Omega_ab4[i], q, predictor, 2*i)
+            k2 = self.get_Omega_derivative_from_index(Omega_ab4[i] + k1 * dt, q, predictor, 2*i+1)
+            k3 = self.get_Omega_derivative_from_index(Omega_ab4[i] + k2 * dt, q, predictor, 2*i+1)
+            k4 = self.get_Omega_derivative_from_index(Omega_ab4[i] + k3 * 2*dt, q, predictor, 2*i+2)
+
+            Omega_next = Omega_ab4[i] + (dt/3) * (k1 + 2*k2 + 2*k3 + k4)
+            
+            Omega_ab4 = Omega_ab4.at[i+1].set(self.normalize_Omega(Omega_next, normA, normB)) # TODO change to RK4
+            k_ab4 = k_ab4.at[i].set(k1)
+            dt_ab4 = dt_ab4.at[i].set(2*dt)
+
+        # AB4 for N-3 steps
         def timestepping_kernel(
-            carry: tuple[Float[Array, " n_Omega"], Float, Float, Float], data
+            carry: tuple[Float[Array, " 4 n_Omega"], Float[Array, " 3 n_Omega"], Float, Float, Float], data
         ) -> tuple[
-            tuple[Float[Array, " n_Omega"], Float, Float, Float],
+            tuple[Float[Array, " 4 n_Omega"], Float[Array, " 3 n_Omega"], Float, Float, Float],
             Float[Array, " n_Omega"],
         ]:
-            Omega, q, normA, normB = carry
+            Omega, k_ab4, q, normA, normB = carry
             predictors_parameters, dt = data
             predictor = eqx.combine(predictors_parameters, n_max)
-            Omega = self.normalize_Omega(
-                self.forward_euler(q, Omega, predictor, dt), normA, normB
-            )
-            return (Omega, q, normA, normB), Omega
+            # Omega = self.normalize_Omega(
+            #     self.forward_euler(q, Omega, predictor, dt), normA, normB
+            # )
+            Omega_next_unnormalized, k_next = self.AB4(q, Omega, k_ab4, predictor, dt)
+            Omega_next = self.normalize_Omega(Omega_next_unnormalized, normA, normB)
+
+            Omega = jnp.concatenate((Omega[1:], Omega_next))
+            k_ab4 = jnp.concatenate((k_ab4[1:], k_next))
+            return (Omega, k_ab4, q, normA, normB), Omega_next
 
         # integral timestepper
         # scan expect a function and initial stata, plus the data
         state, Omega = jax.lax.scan(timestepping_kernel, init_state, extras)
-        Omega = jnp.concatenate([Omega_0[None], Omega], axis=0)
+        Omega = jnp.concatenate([Omega_ab4, Omega], axis=0)
+
+        # TODO end construction zone 
 
         # Interpolating to the coorbital time array
         Omega_interp = self.interp_omega(self.data.t_ds, self.data.t_coorb, Omega).T
