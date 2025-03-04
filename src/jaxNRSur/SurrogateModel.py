@@ -5,7 +5,7 @@ from jax.scipy.special import factorial, gammaln
 from jaxNRSur.Spline import CubicSpline
 from jaxNRSur.DataLoader import NRHybSur3dq8DataLoader, NRSur7dq4DataLoader
 from jaxNRSur.Harmonics import SpinWeightedSphericalHarmonics
-from jaxNRSur.PolyPredictor import PolyPredictor, evaluate_ensemble, evaluate_ensemble_dynamics
+from jaxNRSur.PolyPredictor import PolyPredictor, evaluate_ensemble, evaluate_ensemble_dynamics, make_polypredictor_ensemble
 from jaxtyping import Array, Float, Int
 import equinox as eqx
 
@@ -615,6 +615,21 @@ class NRSur7dq4Model(eqx.Module):
         init_state = (Omega_0, q, normA, normB)
         extras = (predictors_parameters, dt)
 
+        ############# Hacking predictor
+
+        new_coefs = predictors_parameters.coefs
+        new_bfOrders = predictors_parameters.bfOrders
+
+        new_coefs = new_coefs[jnp.array([[0,1,1,2], [2,3,3,4]])]
+        new_bfOrders = new_bfOrders[jnp.array([[0,1,1,2], [2,3,3,4]])]
+
+        predictor = eqx.filter_vmap(eqx.filter_vmap(in_axes=(0, 0, None))(make_polypredictor_ensemble), in_axes=(0, 0, None))(new_coefs, new_bfOrders, 100)
+
+        # Alternative
+
+        predictor = [eqx.filter_vmap(make_polypredictor_ensemble,in_axes=(0, 0, None))(new_coefs[i], new_bfOrders[i], 100) for i in range(2)]
+
+
         # RK4 for n_steps
         n_steps = 3
         k_ab4 = jnp.zeros((n_steps, 11))
@@ -623,7 +638,9 @@ class NRSur7dq4Model(eqx.Module):
         Omega_ab4 = jnp.zeros((n_steps+1, 11))
         Omega_ab4 = Omega_ab4.at[0].set(Omega_0)
         
-        predictor = eqx.combine(predictors_parameters, n_max)
+        jax.debug.breakpoint()
+
+        ########### End hacking predictor
 
         # Iterating forward to every second step because we need the intermediate steps to evaluate RK4
         # This is a result of the PolyPredictor being defined on a fixed dynamical timescale grid
