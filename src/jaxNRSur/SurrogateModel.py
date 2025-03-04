@@ -442,19 +442,18 @@ class NRSur7dq4Model(eqx.Module):
         dOmega_dt = self.get_Omega_derivative(Omega_i, q, predictor)
         return Omega_i + dOmega_dt * dt
 
-    def forward_RK4(
-        self,
+    def AB4(
+        self, 
         q: Float,
-        Omega_i: Float[Array, " n_Omega"],
+        Omega_i4: Float[Array, " 4 n_Omega"],
+        k_ab4: Float[Array, " 3 n_Omega"],
         predictor: PolyPredictor,
         dt: Float,
     ) -> Float[Array, " n_Omega"]:
 
-        k1 = self.get_Omega_derivative_from_index(Omega_i, q, predictor, )
-        k2 = self.get_Omega_derivative_from_index(Omega_i, q, predictor, )
+        dOmega_dt = self.get_Omega_derivative(Omega_i4[-1], q, predictor)
 
-        # TODO
-        return None
+        return Omega_i4[-1] +  dt * (55/24 * dOmega_dt - 59/24 * k_ab4[2] + 37/24 * k_ab4[1] - 9/24 * k_ab4[0])
 
     def normalize_Omega(
         self, Omega: Float[Array, " n_Omega"], normA: float, normB: float
@@ -652,9 +651,6 @@ class NRSur7dq4Model(eqx.Module):
             Omega, k_ab4, q, normA, normB = carry
             predictors_parameters, dt = data
             predictor = eqx.combine(predictors_parameters, n_max)
-            # Omega = self.normalize_Omega(
-            #     self.forward_euler(q, Omega, predictor, dt), normA, normB
-            # )
             Omega_next_unnormalized, k_next = self.AB4(q, Omega, k_ab4, predictor, dt)
             Omega_next = self.normalize_Omega(Omega_next_unnormalized, normA, normB)
 
@@ -664,7 +660,8 @@ class NRSur7dq4Model(eqx.Module):
 
         # integral timestepper
         # scan expect a function and initial stata, plus the data
-        state, Omega = jax.lax.scan(timestepping_kernel, init_state, extras)
+        init_state_AB4 = (Omega_ab4, k_ab4, q, normA, normB)
+        state, Omega = jax.lax.scan(timestepping_kernel, init_state_AB4, extras)
         Omega = jnp.concatenate([Omega_ab4, Omega], axis=0)
 
         # TODO end construction zone 
