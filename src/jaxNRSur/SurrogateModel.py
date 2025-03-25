@@ -464,6 +464,9 @@ class NRSur7dq4Model(eqx.Module):
         dt: Float,
     ) -> tuple[Float[Array, " n_Omega"], Float[Array, " n_Omega"]]:
 
+        # WARNING: the current way of running the RK4 steps is likely
+        # to be inefficient. Need to adjust it.
+
         predictor_parameters, n_max = eqx.partition(predictors, eqx.is_array)
 
         def get_RK4_Omega_derivatives(
