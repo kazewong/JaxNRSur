@@ -454,45 +454,41 @@ class NRSur7dq4Model(eqx.Module):
         dOmega_dt = self.get_Omega_derivative(Omega_i4[-1], q, predictor)
 
         return Omega_i4[-1] +  dt * (55/24 * dOmega_dt - 59/24 * k_ab4[2] + 37/24 * k_ab4[1] - 9/24 * k_ab4[0])
-    
-    def get_RK4_Omega_derivatives(
-            self,
-            carry: tuple[Float[Array, " n_Omega"], Float, Float[Array, " n_Omega"]],
-            data: tuple[PolyPredictor, Float]
-    ):
-        
-        Omega, q, derivative = carry
-        predictor, dt = data
 
-        derivative = self.get_Omega_derivative(Omega + dt * derivative, q, predictor)
-
-        return (Omega, q, derivative), derivative
     
     def RK4(
         self, 
         q: Float,
         Omega: Float[Array, " n_Omega"],
-        predictor: PolyPredictor,
+        predictors,
         dt: Float,
     ) -> tuple[Float[Array, " n_Omega"], Float[Array, " n_Omega"]]:
 
+        predictor_parameters, n_max = eqx.partition(predictors, eqx.is_array)
 
-        # dOmega_dt_k1 = self.get_Omega_derivative(Omega, q, predictor[0])
-        # dOmega_dt_k2 = self.get_Omega_derivative(Omega + dOmega_dt_k1 * dt, q, predictor[1])
-        # dOmega_dt_k3 = self.get_Omega_derivative(Omega + dOmega_dt_k2 * dt, q, predictor[2])
-        # dOmega_dt_k4 = self.get_Omega_derivative(Omega + dOmega_dt_k3 * 2 * dt, q, predictor[3])
+        def get_RK4_Omega_derivatives(
+                carry: tuple[Float[Array, " n_Omega"], Float, Float[Array, " n_Omega"]],
+                data: tuple[PolyPredictor, Float]
+        ):
+            
+            Omega, q, derivative = carry
+            predictor_parameters, dt = data
 
-        predictors_parameters, n_max = eqx.partition(predictor, eqx.is_array)
-        state, dOmega_dt_rk4 = jax.lax.scan(self.get_RK4_Omega_derivatives, (Omega, q, jnp.zeros(len(Omega))), 
-                                            (predictors_parameters, jnp.array([0, 1, 1, 2])*dt))
+            predictors = eqx.combine(predictor_parameters, n_max)
+            derivative = self.get_Omega_derivative(Omega + 0 * derivative, q, predictors)
+
+            return (Omega, q, derivative), derivative
+        
+        state, dOmega_dt_rk4 = jax.lax.scan(get_RK4_Omega_derivatives, (Omega, q, jnp.zeros(len(Omega))), 
+                                            (predictor_parameters, jnp.array([0, 1, 1, 2])*dt))
 
         Omega_next = Omega + (dt/3) * (dOmega_dt_rk4[0] + 2*dOmega_dt_rk4[1] + 2*dOmega_dt_rk4[2] + dOmega_dt_rk4[3])
-        predictor_i = PolyPredictor(predictors_parameters.coefs[-1], predictors_parameters.bfOrders[-1], n_max)
+        predictor_i = make_polypredictor_ensemble(predictors.coefs[-1], predictors.bfOrders[-1], 100)
         k_next = self.get_Omega_derivative(Omega_next, q, predictor_i)
 
-        print(k_next)
+        # print(k_next)
 
-        return Omega_next, k_next
+        return Omega, k_next
 
     def normalize_Omega(
         self, Omega: Float[Array, " n_Omega"], normA: float, normB: float
@@ -691,12 +687,10 @@ class NRSur7dq4Model(eqx.Module):
             Omega = jnp.concatenate((Omega[1:], Omega_next))
             return (Omega, q, normA, normB), (Omega_next, k_next)
         
-        jax.debug.breakpoint()
 
         state, (Omega_rk4, dOmega_dt_rk4) = jax.lax.scan(RK4_kernel, init_state, (predictor_parameters_new, new_dt))
 
         print(Omega_rk4, dOmega_dt_rk4)
-        jax.debug.breakpoint()
 
 
         # Iterating forward to every second step because we need the intermediate steps to evaluate RK4
