@@ -454,6 +454,45 @@ class NRSur7dq4Model(eqx.Module):
         dOmega_dt = self.get_Omega_derivative(Omega_i4[-1], q, predictor)
 
         return Omega_i4[-1] +  dt * (55/24 * dOmega_dt - 59/24 * k_ab4[2] + 37/24 * k_ab4[1] - 9/24 * k_ab4[0])
+    
+    def get_RK4_Omega_derivatives(
+            self,
+            carry: tuple[Float[Array, " n_Omega"], Float, Float[Array, " n_Omega"]],
+            data: tuple[PolyPredictor, Float]
+    ):
+        
+        Omega, q, derivative = carry
+        predictor, dt = data
+
+        derivative = self.get_Omega_derivative(Omega + dt * derivative, q, predictor)
+
+        return (Omega, q, derivative), derivative
+    
+    def RK4(
+        self, 
+        q: Float,
+        Omega: Float[Array, " n_Omega"],
+        predictor: PolyPredictor,
+        dt: Float,
+    ) -> tuple[Float[Array, " n_Omega"], Float[Array, " n_Omega"]]:
+
+
+        # dOmega_dt_k1 = self.get_Omega_derivative(Omega, q, predictor[0])
+        # dOmega_dt_k2 = self.get_Omega_derivative(Omega + dOmega_dt_k1 * dt, q, predictor[1])
+        # dOmega_dt_k3 = self.get_Omega_derivative(Omega + dOmega_dt_k2 * dt, q, predictor[2])
+        # dOmega_dt_k4 = self.get_Omega_derivative(Omega + dOmega_dt_k3 * 2 * dt, q, predictor[3])
+
+        predictors_parameters, n_max = eqx.partition(predictor, eqx.is_array)
+        state, dOmega_dt_rk4 = jax.lax.scan(self.get_RK4_Omega_derivatives, (Omega, q, jnp.zeros(len(Omega))), 
+                                            (predictors_parameters, jnp.array([0, 1, 1, 2])*dt))
+
+        Omega_next = Omega + (dt/3) * (dOmega_dt_rk4[0] + 2*dOmega_dt_rk4[1] + 2*dOmega_dt_rk4[2] + dOmega_dt_rk4[3])
+        predictor_i = PolyPredictor(predictors_parameters.coefs[-1], predictors_parameters.bfOrders[-1], n_max)
+        k_next = self.get_Omega_derivative(Omega_next, q, predictor_i)
+
+        print(k_next)
+
+        return Omega_next, k_next
 
     def normalize_Omega(
         self, Omega: Float[Array, " n_Omega"], normA: float, normB: float
@@ -595,7 +634,7 @@ class NRSur7dq4Model(eqx.Module):
         # quaternions
         init_quat: Float[Array, " n_quat"] = jnp.array([1.0, 0.0, 0.0, 0.0]),
         init_orb_phase: float = 0.0,
-    ) -> tuple((Float[Array, " n_sample"], Float[Array, " n_sample"])):
+    ) -> tuple[Float[Array, " n_sample"], Float[Array, " n_sample"]]:
         # TODO set up the appropriate t_low etc
 
         # Initialize Omega with structure:
@@ -616,47 +655,65 @@ class NRSur7dq4Model(eqx.Module):
         extras = (predictors_parameters, dt)
 
         ############# Hacking predictor
-
+        n_steps = 3
         new_coefs = predictors_parameters.coefs
         new_bfOrders = predictors_parameters.bfOrders
 
-        new_coefs = new_coefs[jnp.array([[0,1,1,2], [2,3,3,4]])]
-        new_bfOrders = new_bfOrders[jnp.array([[0,1,1,2], [2,3,3,4]])]
+        new_coefs = new_coefs[jnp.array([[0,1,1,2], [2,3,3,4], [4,5,5,6]])]
+        new_bfOrders = new_bfOrders[jnp.array([[0,1,1,2], [2,3,3,4], [4,5,5,6]])]
+        new_dt = dt[:6:2]
 
         predictor = eqx.filter_vmap(eqx.filter_vmap(in_axes=(0, 0, None))(make_polypredictor_ensemble), in_axes=(0, 0, None))(new_coefs, new_bfOrders, 100)
-
-        # Alternative
-
-        predictor = [eqx.filter_vmap(make_polypredictor_ensemble,in_axes=(0, 0, None))(new_coefs[i], new_bfOrders[i], 100) for i in range(2)]
-
+        predictor_parameters_new, n_max = eqx.partition(predictor, eqx.is_array)
 
         # RK4 for n_steps
-        n_steps = 3
-        k_ab4 = jnp.zeros((n_steps, 11))
-        dt_ab4 = jnp.zeros(n_steps)
+        k_rk4 = jnp.zeros((n_steps, 11))
+        dt_rk4 = jnp.zeros(n_steps)
 
-        Omega_ab4 = jnp.zeros((n_steps+1, 11))
-        Omega_ab4 = Omega_ab4.at[0].set(Omega_0)
-        
-        jax.debug.breakpoint()
+        Omega_rk4 = jnp.zeros((n_steps+1, 11))
+        Omega_rk4 = Omega_rk4.at[0].set(Omega_0)
 
         ########### End hacking predictor
 
+        # RK4 for 3 steps
+        def RK4_kernel(
+            carry: tuple[Float[Array, " n_Omega"],  Float, Float, Float], data
+        ) -> tuple[
+            tuple[Float[Array, " n_Omega"], Float, Float, Float],
+            tuple[Float[Array, " n_Omega"], Float[Array, " n_Omega"]]
+        ]:
+            Omega, q, normA, normB = carry
+            predictors_parameters, dt = data
+            predictor = eqx.combine(predictors_parameters, n_max)
+            Omega_next_unnormalized, k_next = self.RK4(q, Omega, predictor, dt)
+            Omega_next = self.normalize_Omega(Omega_next_unnormalized, normA, normB)
+
+            Omega = jnp.concatenate((Omega[1:], Omega_next))
+            return (Omega, q, normA, normB), (Omega_next, k_next)
+        
+        jax.debug.breakpoint()
+
+        state, (Omega_rk4, dOmega_dt_rk4) = jax.lax.scan(RK4_kernel, init_state, (predictor_parameters_new, new_dt))
+
+        print(Omega_rk4, dOmega_dt_rk4)
+        jax.debug.breakpoint()
+
+
         # Iterating forward to every second step because we need the intermediate steps to evaluate RK4
         # This is a result of the PolyPredictor being defined on a fixed dynamical timescale grid
-        for i, dt in enumerate(self.data.diff_t_ds[:2 * n_steps:2]):
+        # for i, dt in enumerate(self.data.diff_t_ds[:2 * n_steps:2]):
             
-            # TODO check with Vijay about non-uniform dt
-            k1 = self.get_Omega_derivative_from_index(Omega_ab4[i], q, predictor, 2*i)
-            k2 = self.get_Omega_derivative_from_index(Omega_ab4[i] + k1 * dt, q, predictor, 2*i+1)
-            k3 = self.get_Omega_derivative_from_index(Omega_ab4[i] + k2 * dt, q, predictor, 2*i+1)
-            k4 = self.get_Omega_derivative_from_index(Omega_ab4[i] + k3 * 2*dt, q, predictor, 2*i+2)
+        #     # TODO check with Vijay about non-uniform dt
+        #     k1 = self.get_Omega_derivative_from_index(Omega_ab4[i], q, predictor, 2*i)
+        #     k2 = self.get_Omega_derivative_from_index(Omega_ab4[i] + k1 * dt, q, predictor, 2*i+1)
+        #     k3 = self.get_Omega_derivative_from_index(Omega_ab4[i] + k2 * dt, q, predictor, 2*i+1)
+        #     k4 = self.get_Omega_derivative_from_index(Omega_ab4[i] + k3 * 2*dt, q, predictor, 2*i+2)
 
-            Omega_next = Omega_ab4[i] + (dt/3) * (k1 + 2*k2 + 2*k3 + k4)
+        #     Omega_next = Omega_ab4[i] + (dt/3) * (k1 + 2*k2 + 2*k3 + k4)
             
-            Omega_ab4 = Omega_ab4.at[i+1].set(self.normalize_Omega(Omega_next, normA, normB)) # TODO change to RK4
-            k_ab4 = k_ab4.at[i].set(k1)
-            dt_ab4 = dt_ab4.at[i].set(2*dt)
+        #     Omega_ab4 = Omega_ab4.at[i+1].set(self.normalize_Omega(Omega_next, normA, normB)) # TODO change to RK4
+        #     k_ab4 = k_ab4.at[i].set(k1)
+        #     dt_ab4 = dt_ab4.at[i].set(2*dt)
 
         # AB4 for N-3 steps
         def timestepping_kernel(
