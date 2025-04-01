@@ -448,12 +448,38 @@ class NRSur7dq4Model(eqx.Module):
         Omega_i4: Float[Array, " 4 n_Omega"],
         k_ab4: Float[Array, " 3 n_Omega"],
         predictor: PolyPredictor,
-        dt: Float,
-    ) -> Float[Array, " n_Omega"]:
+        dt: Float[Array, " 4"],
+    ) -> tuple[Float[Array, " n_Omega"], Float[Array, " n_Omega"]]:
 
         dOmega_dt = self.get_Omega_derivative(Omega_i4[-1], q, predictor)
 
-        return Omega_i4[-1] +  dt * (55/24 * dOmega_dt - 59/24 * k_ab4[2] + 37/24 * k_ab4[1] - 9/24 * k_ab4[0])
+        # Using the timestep variable AB4 from gwsurrogate
+        dt1 = dt[0]; dt2 = dt[1]; dt3 = dt[2]; dt4 = dt[3]
+
+        dt12 = dt1 + dt2
+        dt123 = dt12 + dt3
+        dt23 = dt2 + dt3
+
+        D1 = dt1 * dt12 * dt123
+        D2 = dt1 * dt2 * dt23
+        D3 = dt2 * dt12 * dt3
+
+        B41 = dt3 * dt23 / D1
+        B42 = -1 * dt3 * dt123 / D2
+        B43 = dt23 * dt123 / D3
+        B4 = B41 + B42 + B43
+
+        C41 = (dt23 + dt3) / D1
+        C42 = -1 * (dt123 + dt3) / D2
+        C43 = (dt123 + dt23) / D3
+        C4 = C41 + C42 + C43
+
+        A = dOmega_dt;
+        B = dOmega_dt*B4 - k_ab4[0]*B41 - k_ab4[1]*B42 - k_ab4[2]*B43;
+        C = dOmega_dt*C4 - k_ab4[0]*C41 - k_ab4[1]*C42 - k_ab4[2]*C43;
+        D = (dOmega_dt-k_ab4[0])/D1 - (dOmega_dt-k_ab4[1])/D2 + (dOmega_dt-k_ab4[2])/D3
+
+        return Omega_i4[-1] +  dt4 * (A + dt4 * (0.5*B + dt4*( C/3.0 + dt4*0.25*D))), dOmega_dt
 
     
     def RK4(
@@ -471,27 +497,25 @@ class NRSur7dq4Model(eqx.Module):
 
         def get_RK4_Omega_derivatives(
                 carry: tuple[Float[Array, " n_Omega"], Float, Float[Array, " n_Omega"]],
-                data: tuple[PolyPredictor, Float]
+                data: tuple[PolyPredictor, Float[Array, " 4"]]
         ):
             
             Omega, q, derivative = carry
             predictor_parameters, dt = data
 
             predictors = eqx.combine(predictor_parameters, n_max)
-            derivative = self.get_Omega_derivative(Omega + 0 * derivative, q, predictors)
+            derivative = self.get_Omega_derivative(Omega + dt * derivative, q, predictors)
 
             return (Omega, q, derivative), derivative
         
         state, dOmega_dt_rk4 = jax.lax.scan(get_RK4_Omega_derivatives, (Omega, q, jnp.zeros(len(Omega))), 
                                             (predictor_parameters, jnp.array([0, 1, 1, 2])*dt))
 
-        Omega_next = Omega + (dt/3) * (dOmega_dt_rk4[0] + 2*dOmega_dt_rk4[1] + 2*dOmega_dt_rk4[2] + dOmega_dt_rk4[3])
+        Omega_next = Omega + (1/3) * (dt[0] * dOmega_dt_rk4[0] + 2*dt[0] * dOmega_dt_rk4[1] + 2*dt[0] *dOmega_dt_rk4[2] + dt[0] * dOmega_dt_rk4[3])
         predictor_i = make_polypredictor_ensemble(predictors.coefs[-1], predictors.bfOrders[-1], 100)
         k_next = self.get_Omega_derivative(Omega_next, q, predictor_i)
 
-        # print(k_next)
-
-        return Omega, k_next
+        return Omega_next, k_next
 
     def normalize_Omega(
         self, Omega: Float[Array, " n_Omega"], normA: float, normB: float
@@ -651,7 +675,6 @@ class NRSur7dq4Model(eqx.Module):
         # TODO start construction zone
         # Start the timestepping process
         init_state = (Omega_0, q, normA, normB)
-        extras = (predictors_parameters, dt)
 
         ############# Hacking predictor
         n_steps = 3
@@ -660,18 +683,13 @@ class NRSur7dq4Model(eqx.Module):
 
         new_coefs = new_coefs[jnp.array([[0,1,1,2], [2,3,3,4], [4,5,5,6]])]
         new_bfOrders = new_bfOrders[jnp.array([[0,1,1,2], [2,3,3,4], [4,5,5,6]])]
-        new_dt = dt[:6:2]
+        new_dt = dt[:2*n_steps][jnp.array([[0,1,1,2], [2,3,3,4], [4,5,5,6]])]
+        t_ds_rk4 = self.data.t_ds[:2*n_steps:2]
 
         predictor = eqx.filter_vmap(eqx.filter_vmap(in_axes=(0, 0, None))(make_polypredictor_ensemble), in_axes=(0, 0, None))(new_coefs, new_bfOrders, 100)
         predictor_parameters_new, n_max = eqx.partition(predictor, eqx.is_array)
 
         # RK4 for n_steps
-        k_rk4 = jnp.zeros((n_steps, 11))
-        dt_rk4 = jnp.zeros(n_steps)
-
-        Omega_rk4 = jnp.zeros((n_steps+1, 11))
-        Omega_rk4 = Omega_rk4.at[0].set(Omega_0)
-
         ########### End hacking predictor
 
         # RK4 for 3 steps
@@ -687,14 +705,10 @@ class NRSur7dq4Model(eqx.Module):
             Omega_next_unnormalized, k_next = self.RK4(q, Omega, predictor, dt)
             Omega_next = self.normalize_Omega(Omega_next_unnormalized, normA, normB)
 
-            Omega = jnp.concatenate((Omega[1:], Omega_next))
-            return (Omega, q, normA, normB), (Omega_next, k_next)
+            return (Omega_next, q, normA, normB), (Omega_next, k_next)
         
 
         state, (Omega_rk4, dOmega_dt_rk4) = jax.lax.scan(RK4_kernel, init_state, (predictor_parameters_new, new_dt))
-
-        print(Omega_rk4, dOmega_dt_rk4)
-
 
         # Iterating forward to every second step because we need the intermediate steps to evaluate RK4
         # This is a result of the PolyPredictor being defined on a fixed dynamical timescale grid
@@ -725,20 +739,42 @@ class NRSur7dq4Model(eqx.Module):
             Omega_next_unnormalized, k_next = self.AB4(q, Omega, k_ab4, predictor, dt)
             Omega_next = self.normalize_Omega(Omega_next_unnormalized, normA, normB)
 
-            Omega = jnp.concatenate((Omega[1:], Omega_next))
-            k_ab4 = jnp.concatenate((k_ab4[1:], k_next))
+            Omega = jnp.concatenate((Omega[1:], Omega_next[jnp.newaxis,:]),axis=0)
+            k_ab4 = jnp.concatenate((k_ab4[1:], k_next[jnp.newaxis,:]),axis=0)
             return (Omega, k_ab4, q, normA, normB), Omega_next
 
         # integral timestepper
         # scan expect a function and initial stata, plus the data
-        init_state_AB4 = (Omega_ab4, k_ab4, q, normA, normB)
-        state, Omega = jax.lax.scan(timestepping_kernel, init_state_AB4, extras)
-        Omega = jnp.concatenate([Omega_ab4, Omega], axis=0)
+        # Building the new predictor with the first 6 timesteps cut off
+        ab4_coefs = predictors_parameters.coefs
+        ab4_bfOrders = predictors_parameters.bfOrders
+
+        ab4_coefs = ab4_coefs[2*n_steps:]
+        ab4_bfOrders = ab4_bfOrders[2*n_steps:]
+
+        
+        t_ds_ab4 = self.data.t_ds[2*n_steps:]
+        t_ds_array = jnp.concatenate([t_ds_rk4, t_ds_ab4])
+
+        dt_combined = jnp.diff(t_ds_array)
+
+        dt_ab4 = dt_combined[jnp.array([[i-3, i-2, i-1, i] for i in range(n_steps, len(dt_combined))])]
+
+        predictor = eqx.filter_vmap(make_polypredictor_ensemble)(ab4_coefs, ab4_bfOrders, 100)
+        predictor_parameters_ab4, n_max = eqx.partition(predictor, eqx.is_array)
+
+
+        init_state_AB4 = (Omega_rk4, dOmega_dt_rk4, q, normA, normB)
+        state, Omega = jax.lax.scan(timestepping_kernel, init_state_AB4, (predictor_parameters_ab4, dt_ab4))
+        Omega = jnp.concatenate([Omega_0[jnp.newaxis,:], Omega_rk4, Omega], axis=0)
+
+        print(Omega.shape)
+        print(t_ds_array.shape)
 
         # TODO end construction zone 
 
         # Interpolating to the coorbital time array
-        Omega_interp = self.interp_omega(self.data.t_ds, self.data.t_coorb, Omega).T
+        Omega_interp = self.interp_omega(t_ds_array, self.data.t_coorb, Omega).T
 
         # Normalizing the quaternions after interpolation
         Omega_interp = Omega_interp.at[:,:4].set((Omega_interp[:,:4].T/(jnp.sqrt(jnp.sum(jnp.abs(Omega_interp[:,:4])**2, axis=1)) +1.e-12)).T)
