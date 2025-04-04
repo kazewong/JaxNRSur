@@ -258,35 +258,46 @@ class NRSur7dq4DataLoader(eqx.Module):
             jnp.array(coefs), jnp.array(bfOrders), n_max
         )
         result["eim_basis"] = jnp.array(node_data["EIBasis"])
+        result['node_indices'] = jnp.array(node_data["nodeIndices"])
         return result
 
     def read_single_mode(self, file: dict, mode: tuple[int, int], n_max: int) -> dict:
         result = {}
-        if mode[1] != 0:
+        if mode[1] > 0:
             result["real_plus"] = self.read_mode_function(
                 file[f"hCoorb_{mode[0]}_{mode[1]}_Re+"], n_max
             )
             result["imag_plus"] = self.read_mode_function(
                 file[f"hCoorb_{mode[0]}_{mode[1]}_Im+"], n_max
             )
-
             result["real_minus"] = self.read_mode_function(
                 file[f"hCoorb_{mode[0]}_{mode[1]}_Re-"], n_max
             )
             result["imag_minus"] = self.read_mode_function(
                 file[f"hCoorb_{mode[0]}_{mode[1]}_Im-"], n_max
             )
-
         else:
-            result["real"] = self.read_mode_function(
+            result["real_plus"] = self.read_mode_function(
                 file[f"hCoorb_{mode[0]}_{mode[1]}_real"], n_max
             )
             # result['real_minus'] = 0
             # TODO Make the structure of the m=0 modes similar
             # to hangle in the same way as m != 0
 
-            result["imag"] = self.read_mode_function(
+            result["imag_plus"] = self.read_mode_function(
                 file[f"hCoorb_{mode[0]}_{mode[1]}_imag"], n_max
+            )
+            
+            node_data = {
+                'nodeModelers': {"coefs_0": jnp.array([0]), 'bfOrders_0': jnp.zeros((0,7))},
+                'nodeIndices': jnp.array([0]),
+                'EIBasis': jnp.array([0]),
+            }
+            result["real_minus"] = self.read_mode_function(
+                node_data, 1
+            )
+            result["imag_minus"] = self.read_mode_function(
+                node_data, 1
             )
 
         result["mode"] = mode

@@ -31,7 +31,6 @@ class PolyPredictor(eqx.Module):
         coefs: Float[Array, " n_sum"],
         bfOrders: Float[Array, " n_sum n_lambda"],
     ) -> Float[Array, " 1"]:
-        # TODO: Check this Ethan
         return jnp.dot(
             coefs,
             jnp.prod(
@@ -42,18 +41,31 @@ class PolyPredictor(eqx.Module):
 
     def __call__(self, X: Float[Array, " n_lambda "]) -> Float[Array, " 1"]:
         return self.predict(X, self.coefs, self.bfOrders)
+    
+    def predict_at_index(self, X: Float[Array, " n_lambda "], idx: Int) -> Float[Array, " 1"]:
+        return self.predict(X, self.coefs[idx], self.bfOrders[idx])
 
     @property
     def n_nodes(self) -> int:
         return self.coefs.shape[0]
 
-
 @eqx.filter_vmap(in_axes=(eqx.if_array(0), None))
-def evaluate_ensemble(
+def evaluate_ensemble_dynamics(
     predictors: PolyPredictor, inputs: Float[Array, " n_lambda"]
 ) -> Float[Array, " n_predictor"]:
     return predictors(inputs)
 
+@eqx.filter_vmap(in_axes=(None, eqx.if_array(0))) # TODO this is not working. I need something where I can specify the index and iterate over all the specific output parameters 
+def evaluate_ensemble_dynamics_at_index(
+    predictors: PolyPredictor, inputs: Float[Array, " n_lambda"], index: int
+) -> Float[Array, " n_predictor"]:
+    return predictors.predict_at_index(inputs, predictors.coefs, predictors.bfOrders, index)
+
+@eqx.filter_vmap(in_axes=(eqx.if_array(0), eqx.if_array(0)))
+def evaluate_ensemble(
+    predictors: PolyPredictor, inputs: Float[Array, " n_lambda"]
+) -> Float[Array, " n_predictor"]:
+    return predictors(inputs)
 
 @eqx.filter_vmap(in_axes=(0, 0, None))
 def make_polypredictor_ensemble(
