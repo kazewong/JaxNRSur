@@ -511,9 +511,9 @@ class NRSur7dq4Model(eqx.Module):
         state, dOmega_dt_rk4 = jax.lax.scan(get_RK4_Omega_derivatives, (Omega, q, jnp.zeros(len(Omega))), 
                                             (predictor_parameters, jnp.array([0, 1, 1, 2])*dt))
 
-        Omega_next = Omega + (1/3) * (dt[0] * dOmega_dt_rk4[0] + 2*dt[0] * dOmega_dt_rk4[1] + 2*dt[0] *dOmega_dt_rk4[2] + dt[0] * dOmega_dt_rk4[3])
-        predictor_i = make_polypredictor_ensemble(predictors.coefs[-1], predictors.bfOrders[-1], 100)
-        k_next = self.get_Omega_derivative(Omega_next, q, predictor_i)
+        Omega_next = Omega + (1./3.) * (dt[0] * dOmega_dt_rk4[0] + 2*dt[0] * dOmega_dt_rk4[1] + 2*dt[0] *dOmega_dt_rk4[2] + dt[0] * dOmega_dt_rk4[3])
+        predictor_i = make_polypredictor_ensemble(predictors.coefs[0], predictors.bfOrders[0], 100)
+        k_next = self.get_Omega_derivative(Omega, q, predictor_i)
 
         return Omega_next, k_next
 
