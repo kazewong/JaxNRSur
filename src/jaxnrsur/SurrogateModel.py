@@ -2,10 +2,10 @@ from functools import partial
 import jax.numpy as jnp
 import jax
 from jax.scipy.special import factorial, gammaln
-from jaxNRSur.Spline import CubicSpline
-from jaxNRSur.DataLoader import NRHybSur3dq8DataLoader, NRSur7dq4DataLoader
-from jaxNRSur.Harmonics import SpinWeightedSphericalHarmonics
-from jaxNRSur.PolyPredictor import PolyPredictor, evaluate_ensemble, evaluate_ensemble_dynamics, make_polypredictor_ensemble
+from jaxnrsur.Spline import CubicSpline
+from jaxnrsur.DataLoader import NRHybSur3dq8DataLoader, NRSur7dq4DataLoader
+from jaxnrsur.Harmonics import SpinWeightedSphericalHarmonics
+from jaxnrsur.PolyPredictor import PolyPredictor, evaluate_ensemble, evaluate_ensemble_dynamics, make_polypredictor_ensemble
 from jaxtyping import Array, Float, Int
 import equinox as eqx
 

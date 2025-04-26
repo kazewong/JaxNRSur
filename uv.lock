@@ -112,8 +112,8 @@ wheels = [
 
 [[package]]
 name = "jaxnrsur"
-version = "0.1.0"
-source = { virtual = "." }
+version = "0.0.1"
+source = { editable = "." }
 dependencies = [
     { name = "equinox" },
     { name = "jax" },
@@ -132,6 +132,9 @@ requires-dist = [
     { name = "jax", extras = ["cuda"], marker = "extra == 'cuda'", specifier = ">=0.6.0" },
     { name = "lineax", specifier = ">=0.0.8" },
 ]
+
+[package.metadata.requires-dev]
+dev = [{ name = "jaxnrsur", editable = "." }]
 
 [[package]]
 name = "jaxtyping"

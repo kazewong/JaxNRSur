@@ -1,6 +1,6 @@
 import jax.numpy as jnp
 from jaxtyping import Array, Float
-from jaxNRSur import Kernels
+from jaxnrsur import Kernels
 import equinox as eqx
 
 

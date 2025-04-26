@@ -1,5 +1,5 @@
 [project]
-name = "jaxnrsur"
+name = "jaxNRSur"
 version = "0.0.1"
 description = "Numerical relativity surrogate model for gravitational waveforms in Jax"
 readme = "README.md"
@@ -25,4 +25,18 @@ Repository = "https://github.com/kazewong/JaxNRSur"
 cuda = [
     "jax[cuda]>=0.6.0",
 ]
+
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "jaxnrsur",
+]
+
+[tool.uv.sources]
+jaxnrsur = { workspace = true }
+
 

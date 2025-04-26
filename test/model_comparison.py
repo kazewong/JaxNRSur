@@ -1,4 +1,4 @@
-from jaxNRSur.SurrogateModel import NRSur7dq4Model
+from jaxnrsur.SurrogateModel import NRSur7dq4Model
 import jax.numpy as jnp
 import numpy as np
 from scipy.interpolate import interp1d

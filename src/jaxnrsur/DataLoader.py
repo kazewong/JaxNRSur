@@ -1,6 +1,6 @@
 import h5py
-from jaxNRSur.EIMPredictor import EIMpredictor
-from jaxNRSur.PolyPredictor import PolyPredictor, make_polypredictor_ensemble
+from jaxnrsur.EIMPredictor import EIMpredictor
+from jaxnrsur.PolyPredictor import PolyPredictor, make_polypredictor_ensemble
 import jax.numpy as jnp
 import equinox as eqx
 from jaxtyping import Array, Float
