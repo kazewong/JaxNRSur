@@ -1,7 +1,28 @@
-[build-system]
-requires = ["setuptools","wheel"]
-build-backend = "setuptools.build_meta"
+[project]
+name = "jaxnrsur"
+version = "0.0.1"
+description = "Numerical relativity surrogate model for gravitational waveforms in Jax"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+    {name = "Kaze Wong", email = "kazewong.physics@gmail.com"},
+    {name = "Max isi"},
+    {name = "Ethan Payne"},
+]
+keywords = ["gravitational-wave", "Numerical relativity", "autodiff", "jax"]
+license = {text = "MIT"}
+dependencies = [
+    "equinox>=0.12.1",
+    "jax>=0.6.0",
+    "lineax>=0.0.8",
+]
 
-[tool.pyright]
-include=["src"]
-exclude = ["docs"]
+[project.urls]
+Homepage = "https://github.com/kazewong/JaxNRSur"
+Repository = "https://github.com/kazewong/JaxNRSur"
+
+[project.optional-dependencies]
+cuda = [
+    "jax[cuda]>=0.6.0",
+]
+
