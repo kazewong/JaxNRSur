@@ -1,219 +1,190 @@
 from functools import partial
 import jax.numpy as jnp
 import jax
-from jax.scipy.special import factorial, gammaln
+from jax.scipy.special import factorial
 from jaxnrsur.Spline import CubicSpline
-from jaxnrsur.DataLoader import NRHybSur3dq8DataLoader, NRSur7dq4DataLoader
 from jaxnrsur.Harmonics import SpinWeightedSphericalHarmonics
+from jaxnrsur.DataLoader import load_data, h5Group_to_dict
+from jaxnrsur.special_function import comb
 from jaxnrsur.PolyPredictor import PolyPredictor, evaluate_ensemble, evaluate_ensemble_dynamics, make_polypredictor_ensemble
 from jaxtyping import Array, Float, Int
 import equinox as eqx
 
-jax.config.update("jax_enable_x64", True)
 
+class NRSur7dq4DataLoader(eqx.Module):
+    t_coorb: Float[Array, " n_sample"]
+    t_ds: Float[Array, " n_dynam"]
+    diff_t_ds: Float[Array, " n_dynam"]
 
-def comb(N, k):
-    return jnp.exp(gammaln(N + 1) - gammaln(k + 1) - gammaln(N - k + 1))
+    modes: list[dict]
+    coorb: PolyPredictor
 
-
-def get_T3_phase(q: float, t: Float[Array, " n"], t_ref: float = 1000.0) -> float:
-    eta = q / (1 + q) ** 2
-    theta_raw = (eta * (t_ref - t) / 5) ** (-1.0 / 8)
-    theta_cal = (eta * (t_ref + 1000) / 5) ** (-1.0 / 8)
-    return 2.0 / (eta * theta_raw**5) - 2.0 / (eta * theta_cal**5)
-
-
-def effective_spin(q: float, chi1: float, chi2: float) -> tuple[float, float]:
-    eta = q / (1.0 + q) ** 2
-    chi_wtAvg = (q * chi1 + chi2) / (1 + q)
-    chi_hat = (chi_wtAvg - 38.0 * eta / 113.0 * (chi1 + chi2)) / (
-        1.0 - 76.0 * eta / 113.0
-    )
-    chi_a = (chi1 - chi2) / 2.0
-    return chi_hat, chi_a
-
-
-class NRHybSur3dq8Model(eqx.Module):
-    data: NRHybSur3dq8DataLoader
-    mode_no22: list[dict]
-    harmonics: list[SpinWeightedSphericalHarmonics]
-    mode_22_index: int
-    m_mode: Int[Array, " n_modes-1"]
-    negative_mode_prefactor: Int[Array, " n_modes-1"]
+    @property
+    def coorb_nmax(self) -> int:
+        return self.coorb.n_max
 
     def __init__(
         self,
         modelist: list[tuple[int, int]] = [
-            (2, 2),
-            (2, 1),
             (2, 0),
+            (2, 1),
+            (2, 2),
             (3, 0),
             (3, 1),
             (3, 2),
             (3, 3),
+            (4, 0),
+            (4, 1),
             (4, 2),
             (4, 3),
             (4, 4),
-            (5, 5),
         ],
-    ):
+    ) -> None:
         """
-        Initialize NRHybSur3dq8Model.
-        The model is described in the paper:
-        https://journals.aps.org/prd/abstract/10.1103/PhysRevD.99.064045
+        Initialize the data loader for the NRSur7dq4 model
 
         Args:
-            modelist (list[tuple[int, int]]): List of modes to be used.
+            path (str): Path to the HDF5 file
+            modelist (list[tuple[int, int]], optional): List of modes to load.
+            Defaults to [(2, 0), (2, 1), (2, 2), (3, 0), (3, 1),
+                (3, 2), (3, 3), (4, 0), (4, 1), (4, 2), (4, 3), (4, 4)].
         """
-        self.data = NRHybSur3dq8DataLoader(modelist=modelist)
-        self.harmonics = []
-        self.negative_harmonics = []
-        negative_mode_prefactor = []
-        for mode in modelist:
-            if mode != (2, 2):
-                self.harmonics.append(
-                    SpinWeightedSphericalHarmonics(-2, mode[0], mode[1])
-                )
-                self.negative_harmonics.append(
-                    SpinWeightedSphericalHarmonics(-2, mode[0], -mode[1])
-                )
-            if mode[1] > 0:
-                negative_mode_prefactor.append((-1) ** mode[0])
-            else:
-                negative_mode_prefactor.append(0)
+        h5_file = load_data("https://zenodo.org/records/3348115/files/NRSur7dq4.h5?download=1", "NRSur7dq4.h5")
 
-        self.mode_no22 = [
-            self.data.modes[i] for i in range(len(self.data.modes)) if i != 0
-        ]
-        self.mode_22_index = int(
-            jnp.where((jnp.array(modelist) == jnp.array([[2, 2]])).all(axis=1))[0][0]
-        )
-        self.m_mode = jnp.array(
-            [modelist[i][1] for i in range(len(modelist)) if i != self.mode_22_index]
-        )
-        self.negative_mode_prefactor = jnp.array(negative_mode_prefactor)
+        data = h5Group_to_dict(h5_file)
+        self.t_coorb = jnp.array(data["t_coorb"])
+        self.t_ds = jnp.array(data["t_ds"])
+        self.diff_t_ds = jnp.diff(self.t_ds)
 
-    def __call__(
-        self,
-        time: Float[Array, " n_sample"],
-        params: Float[Array, " n_dim"],
-        theta: float = 0.0,
-        phi: float = 0.0,
-    ) -> Float[Array, " n_sample"]:
-        """
-        Alias for get_waveform.
+        coorb_nmax = -100
+        basis_nmax = -100
+        for key in data:
+            if key.startswith("ds_node"):
+                for coorb_key in data[key]:
+                    coorb_nmax = max(coorb_nmax, data[key][coorb_key].shape[0])
+            if key.startswith("hCoorb"):
+                for coorb_key in data[key]["nodeModelers"]:
+                    basis_nmax = max(
+                        basis_nmax, data[key]["nodeModelers"][coorb_key].shape[0]
+                    )
 
-        Args:
-            time (Float[Array, " n_sample"]): Time grid.
-            params (Float[Array, " n_dim"]): Source parameters.
-            theta (float, optional): Polar angle. Defaults to 0.0.
-            phi (float, optional): Azimuthal angle. Defaults to 0.0.
-        
-        """
-        return self.get_waveform(time, params, theta, phi)
-
-    @property
-    def n_modes(self) -> int:
-        """
-        Number of modes in the model.
-        """
-        return len(self.data.modes)
-
-    @staticmethod
-    def get_eim(
-        eim_dict: dict, params: Float[Array, " n_dim"]
-    ) -> Float[Array, " n_sample"]:
-        """
-        Construct the EIM basis given the source parameters.
-
-        Args:
-            eim_dict (dict): EIM dictionary.
-            params (Float[Array, " n_dim"]): Source parameters.
-        """
-        result = jnp.zeros((eim_dict["n_nodes"], 1))
-        for i in range(eim_dict["n_nodes"]):
-            result = result.at[i].set(eim_dict["predictors"][i](params))
-        return jnp.dot(eim_dict["eim_basis"].T, result[:, 0])
-
-    @staticmethod
-    def get_real_imag(
-        mode: dict, params: Float[Array, " n_dim"]
-    ) -> tuple[Float[Array, " n_sample"], Float[Array, " n_sample"]]:
-        params = params[None]
-        real = NRHybSur3dq8Model.get_eim(mode["real"], params)
-        imag = NRHybSur3dq8Model.get_eim(mode["imag"], params)
-        return real, imag
-
-    @staticmethod
-    def get_multi_real_imag(
-        modes: list[dict], params: Float[Array, " n_dim"]
-    ) -> tuple[list[Float[Array, " n_sample"]], list[Float[Array, " n_sample"]]]:
-        return jax.tree_util.tree_map(
-            lambda mode: __class__.get_real_imag(mode, params),
-            modes,
-            is_leaf=lambda x: isinstance(x, dict),
-        )
-
-    def get_mode(
-        self,
-        real: Float[Array, " n_sample"],
-        imag: Float[Array, " n_sample"],
-        time: Float[Array, " n_time"],
-    ) -> Float[Array, " n_sample"]:
-        return CubicSpline(self.data.sur_time, real)(time) + 1j * CubicSpline(
-            self.data.sur_time, imag
-        )(time)
-
-    def get_22_mode(
-        self,
-        time: Float[Array, " n_samples"],
-        params: Float[Array, " n_dim"],
-    ) -> Float[Array, " n_sample"]:
-        # 22 mode has weird dict that making a specical function is easier.
-        q = params[0]
-        params = params[None]
-        amp = self.get_eim(self.data.modes[self.mode_22_index]["amp"], params)
-        phase = -self.get_eim(self.data.modes[self.mode_22_index]["phase"], params)
-        phase = phase + get_T3_phase(q, self.data.sur_time)  # type: ignore
-        amp_interp = CubicSpline(self.data.sur_time, amp)(time)
-        phase_interp = CubicSpline(self.data.sur_time, phase)(time)
-        return amp_interp * jnp.exp(1j * phase_interp)
-
-    def get_waveform(
-        self,
-        time: Float[Array, " n_sample"],
-        params: Float[Array, " n_dim"],
-        theta: float = 0.0,
-        phi: float = 0.0,
-    ) -> Float[Array, " n_sample"]:
-        """
-        Current implementation sepearates the 22 mode from the rest of the modes,
-        because of the data strucutre and how they are combined.
-        This means the CubicSpline is called in a loop,
-        which is not ideal (double the run time).
-        We should merge the datastructure to make this more efficient.
-        """
-        coeff = jnp.stack(jnp.array(self.get_multi_real_imag(self.mode_no22, params)))
-        modes = eqx.filter_vmap(self.get_mode, in_axes=(0, 0, None))(
-            coeff[:, 0], coeff[:, 1], time
-        )
-
-        waveform = jnp.zeros_like(time, dtype=jnp.complex64)
-
-        h22 = self.get_22_mode(time, params)
-        waveform += h22 * SpinWeightedSphericalHarmonics(-2, 2, 2)(theta, phi)
-        waveform += jnp.conj(h22) * SpinWeightedSphericalHarmonics(-2, 2, -2)(
-            theta, phi
-        )
-
-        for i, harmonics in enumerate(self.harmonics):
-            waveform += modes[i] * harmonics(theta, phi)
-            waveform += (
-                self.negative_mode_prefactor[i]
-                * jnp.conj(modes[i])
-                * self.negative_harmonics[i](theta, phi)
+        self.modes = []
+        for i in range(len(modelist)):
+            self.modes.append(
+                self.read_single_mode(data, modelist[i], n_max=basis_nmax)
             )
-        return waveform
+
+        self.coorb = self.read_coorb(data, coorb_nmax)
+
+    def read_mode_function(self, node_data: dict, n_max: int) -> dict:
+        result = {}
+        n_nodes = len(node_data["nodeIndices"])  # type: ignore
+        result["n_nodes"] = n_nodes
+
+        coefs = []
+        bfOrders = []
+
+        for count in range(n_nodes):  # n_nodes is the n which you iterate over
+            coef = node_data["nodeModelers"][f"coefs_{count}"]
+            bfOrder = node_data["nodeModelers"][f"bfOrders_{count}"]
+
+            coefs.append(jnp.pad(coef, (0, n_max - len(coef))))
+            bfOrders.append(jnp.pad(bfOrder, ((0, n_max - len(bfOrder)), (0, 0))))
+
+        result["predictors"] = make_polypredictor_ensemble(
+            jnp.array(coefs), jnp.array(bfOrders), n_max
+        )
+        result["eim_basis"] = jnp.array(node_data["EIBasis"])
+        result['node_indices'] = jnp.array(node_data["nodeIndices"])
+        return result
+
+    def read_single_mode(self, file: dict, mode: tuple[int, int], n_max: int) -> dict:
+        result = {}
+        if mode[1] > 0:
+            result["real_plus"] = self.read_mode_function(
+                file[f"hCoorb_{mode[0]}_{mode[1]}_Re+"], n_max
+            )
+            result["imag_plus"] = self.read_mode_function(
+                file[f"hCoorb_{mode[0]}_{mode[1]}_Im+"], n_max
+            )
+            result["real_minus"] = self.read_mode_function(
+                file[f"hCoorb_{mode[0]}_{mode[1]}_Re-"], n_max
+            )
+            result["imag_minus"] = self.read_mode_function(
+                file[f"hCoorb_{mode[0]}_{mode[1]}_Im-"], n_max
+            )
+        else:
+            result["real_plus"] = self.read_mode_function(
+                file[f"hCoorb_{mode[0]}_{mode[1]}_real"], n_max
+            )
+            # result['real_minus'] = 0
+            # TODO Make the structure of the m=0 modes similar
+            # to hangle in the same way as m != 0
+
+            result["imag_plus"] = self.read_mode_function(
+                file[f"hCoorb_{mode[0]}_{mode[1]}_imag"], n_max
+            )
+            
+            node_data = {
+                'nodeModelers': {"coefs_0": jnp.array([0]), 'bfOrders_0': jnp.zeros((0,7))},
+                'nodeIndices': jnp.array([0]),
+                'EIBasis': jnp.array([0]),
+            }
+            result["real_minus"] = self.read_mode_function(
+                node_data, 1
+            )
+            result["imag_minus"] = self.read_mode_function(
+                node_data, 1
+            )
+
+        result["mode"] = mode
+
+        return result
+
+    def read_coorb(self, file: dict, n_max: int) -> PolyPredictor:
+        result = []
+
+        tags = [
+            "chiA_0",
+            "chiA_1",
+            "chiA_2",
+            "chiB_0",
+            "chiB_1",
+            "chiB_2",
+            "omega",
+            "omega_orb_0",
+            "omega_orb_1",
+        ]
+
+        @eqx.filter_vmap(in_axes=(0, 0))
+        def combine_poly_predictors(
+            coefs: Float[Array, " n_coefs n_order"], bfOrders: Float[Array, " n_order"]
+        ) -> PolyPredictor:
+            return make_polypredictor_ensemble(coefs, bfOrders, n_max)
+
+        coefs = []
+        bfOrders = []
+
+        for i in range(len(self.t_ds) - 1):
+            local_coefs = []
+            local_bfOrders = []
+
+            for tag in tags:
+                coef = file[f"ds_node_{i}"][f"{tag}_coefs"]
+                bfOrder = file[f"ds_node_{i}"][f"{tag}_bfOrders"]
+                local_coefs.append(jnp.pad(coef, (0, n_max - len(coef))))
+                local_bfOrders.append(
+                    jnp.pad(bfOrder, ((0, n_max - len(bfOrder)), (0, 0)))
+                )
+
+            coefs.append(jnp.stack(local_coefs))
+            bfOrders.append(jnp.stack(local_bfOrders))
+
+        coefs = jnp.stack(coefs)
+        bfOrders = jnp.stack(bfOrders)
+        result = combine_poly_predictors(coefs, bfOrders)
+
+        return result
 
 
 class NRSur7dq4Model(eqx.Module):
