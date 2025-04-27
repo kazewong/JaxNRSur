@@ -405,15 +405,6 @@ class NRSur7dq4Model(eqx.Module):
 
         return dOmega_dt
 
-    def forward_euler(
-        self,
-        q: Float,
-        Omega_i: Float[Array, " n_Omega"],
-        predictor: PolyPredictor,
-        dt: Float,
-    ) -> Float[Array, " n_Omega"]:
-        dOmega_dt = self.get_Omega_derivative(Omega_i, q, predictor)
-        return Omega_i + dOmega_dt * dt
 
     def AB4(
         self, 
