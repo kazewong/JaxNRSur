@@ -18,6 +18,8 @@ class NRSur7dq4DataLoader(eqx.Module):
 
     modes: list[dict]
     coorb: PolyPredictor
+    rk4_predictor: PolyPredictor
+    ab4_predictor: PolyPredictor
 
     @property
     def coorb_nmax(self) -> int:
