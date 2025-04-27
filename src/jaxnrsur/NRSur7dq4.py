@@ -346,66 +346,6 @@ class NRSur7dq4Model(eqx.Module):
 
         return dOmega_dt
 
-    def get_Omega_derivative_from_index(
-        self,
-        Omega_i: Float[Array, " n_Omega"],
-        q: Float,
-        predictor: PolyPredictor,
-        index: int
-    ) -> Float[Array, " n_Omega"]:
-        coorb_x = self._get_coorb_params(q, Omega_i)
-        fit_params = self._get_fit_params(coorb_x)
-
-        (
-            chiA_0_fit,
-            chiA_1_fit,
-            chiA_2_fit,
-            chiB_0_fit,
-            chiB_1_fit,
-            chiB_2_fit,
-            omega_fit,
-            omega_orb_0_fit,
-            omega_orb_1_fit,
-        ) = [predictor.predict_at_index(fit_params, index) for i in range(9)]
-
-        # Converting to dOmega_dt array
-        dOmega_dt = jnp.zeros(len(Omega_i))
-
-        sp = jnp.sin(Omega_i[4])
-        cp = jnp.cos(Omega_i[4])
-
-        omega_orb_x = omega_orb_0_fit * cp - omega_orb_1_fit * sp
-        omega_orb_y = omega_orb_0_fit * sp + omega_orb_1_fit * cp
-
-        # Quaterion derivative
-        dOmega_dt = dOmega_dt.at[0].set(
-            -0.5 * Omega_i[1] * omega_orb_x - 0.5 * Omega_i[2] * omega_orb_y
-        )
-        dOmega_dt = dOmega_dt.at[1].set(
-            -0.5 * Omega_i[3] * omega_orb_y + 0.5 * Omega_i[0] * omega_orb_x
-        )
-        dOmega_dt = dOmega_dt.at[2].set(
-            0.5 * Omega_i[3] * omega_orb_x + 0.5 * Omega_i[0] * omega_orb_y
-        )
-        dOmega_dt = dOmega_dt.at[3].set(
-            0.5 * Omega_i[1] * omega_orb_y - 0.5 * Omega_i[2] * omega_orb_x
-        )
-
-        # orbital phase derivative
-        dOmega_dt = dOmega_dt.at[4].set(omega_fit)
-
-        # Spin derivatives
-        dOmega_dt = dOmega_dt.at[5].set(chiA_0_fit * cp - chiA_1_fit * sp)
-        dOmega_dt = dOmega_dt.at[6].set(chiA_0_fit * sp + chiA_1_fit * cp)
-        dOmega_dt = dOmega_dt.at[7].set(chiA_2_fit)
-
-        dOmega_dt = dOmega_dt.at[8].set(chiB_0_fit * cp - chiB_1_fit * sp)
-        dOmega_dt = dOmega_dt.at[9].set(chiB_0_fit * sp + chiB_1_fit * cp)
-        dOmega_dt = dOmega_dt.at[10].set(chiB_2_fit)
-
-        return dOmega_dt
-
-
     def AB4(
         self, 
         q: Float,
@@ -673,22 +613,6 @@ class NRSur7dq4Model(eqx.Module):
         
 
         state, (Omega_rk4, dOmega_dt_rk4) = jax.lax.scan(RK4_kernel, init_state, (predictor_parameters_new, new_dt))
-
-        # Iterating forward to every second step because we need the intermediate steps to evaluate RK4
-        # This is a result of the PolyPredictor being defined on a fixed dynamical timescale grid
-        # for i, dt in enumerate(self.data.diff_t_ds[:2 * n_steps:2]):
-            
-        #     # TODO check with Vijay about non-uniform dt
-        #     k1 = self.get_Omega_derivative_from_index(Omega_ab4[i], q, predictor, 2*i)
-        #     k2 = self.get_Omega_derivative_from_index(Omega_ab4[i] + k1 * dt, q, predictor, 2*i+1)
-        #     k3 = self.get_Omega_derivative_from_index(Omega_ab4[i] + k2 * dt, q, predictor, 2*i+1)
-        #     k4 = self.get_Omega_derivative_from_index(Omega_ab4[i] + k3 * 2*dt, q, predictor, 2*i+2)
-
-        #     Omega_next = Omega_ab4[i] + (dt/3) * (k1 + 2*k2 + 2*k3 + k4)
-            
-        #     Omega_ab4 = Omega_ab4.at[i+1].set(self.normalize_Omega(Omega_next, normA, normB)) # TODO change to RK4
-        #     k_ab4 = k_ab4.at[i].set(k1)
-        #     dt_ab4 = dt_ab4.at[i].set(2*dt)
 
         # AB4 for N-3 steps
         def timestepping_kernel(
