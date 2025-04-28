@@ -76,7 +76,10 @@ class NRSur7dq4DataLoader(eqx.Module):
                 self.read_single_mode(data, modelist[i], n_max=basis_nmax)
             )
 
+        # TODO: Remove the following self.coorb poly predictor
         self.coorb = self.read_coorb(data, coorb_nmax)
+        # TODO: Initialize rk4_polypredictor
+        # TODO: Initialize ab4_polypredictor
 
     def read_mode_function(self, node_data: dict, n_max: int) -> dict:
         result = {}
