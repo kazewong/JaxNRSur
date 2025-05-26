@@ -304,20 +304,21 @@ class NRSur7dq4Model(eqx.Module):
     ) -> Float[Array, " n_dim"]:
         # First construct array for coorbital frame
         # borrowing notation from gwsurrogate
-        coorb_x = jnp.zeros(7)
 
         sp = jnp.sin(Omega[4])
         cp = jnp.cos(Omega[4])
 
-        coorb_x = coorb_x.at[0].set(q)
-
-        coorb_x = coorb_x.at[1].set(Omega[5] * cp + Omega[6] * sp)
-        coorb_x = coorb_x.at[2].set(-Omega[5] * sp + Omega[6] * cp)
-        coorb_x = coorb_x.at[3].set(Omega[7])
-
-        coorb_x = coorb_x.at[4].set(Omega[8] * cp + Omega[9] * sp)
-        coorb_x = coorb_x.at[5].set(-Omega[8] * sp + Omega[9] * cp)
-        coorb_x = coorb_x.at[6].set(Omega[10])
+        coorb_x = jnp.array(
+            [
+                q,
+                Omega[5] * cp + Omega[6] * sp,
+                -Omega[5] * sp + Omega[6] * cp,
+                Omega[7],
+                Omega[8] * cp + Omega[9] * sp,
+                -Omega[8] * sp + Omega[9] * cp,
+                Omega[10]
+            ]
+        )
 
         return coorb_x
 
@@ -705,8 +706,6 @@ class NRSur7dq4Model(eqx.Module):
 
         normA = jnp.linalg.norm(params[1:4])
         normB = jnp.linalg.norm(params[4:7])
-
-        dt = self.data.diff_t_ds
 
         # TODO start construction zone
         # Start the timestepping process
