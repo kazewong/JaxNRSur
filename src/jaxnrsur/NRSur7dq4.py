@@ -574,11 +574,12 @@ class NRSur7dq4Model(eqx.Module):
     def interp_omega(
         time_grid: Float[Array, " n_grid"],
         time: Float[Array, " n_sample"],
-        Omega: Float[Array, " n_Omega"],
-    ):
+        Omega: Float[Array, " n_grid n_omega"],
+    ) -> Float[Array, " n_sample n_omega"]:
         return CubicSpline(time_grid, Omega)(time)
 
-    def multiply_quats(self, q1, q2):
+    @staticmethod
+    def multiply_quats(q1, q2):
         return jnp.array(
             [
                 q1[:, 0] * q2[:, 0]
@@ -613,7 +614,7 @@ class NRSur7dq4Model(eqx.Module):
                 jnp.cos(orbphase / 2.0),
                 0.0 * orbphase,
                 0.0 * orbphase,
-                jnp.sin(orbphase / 2.0),
+                jnp.sin(orbp_interphase / 2.0),
             ]
         ).T
         quat_full = self.multiply_quats(quat, quat_rot).T
@@ -766,7 +767,9 @@ class NRSur7dq4Model(eqx.Module):
             init_state_AB4,
             (self.data.ab4_predictor, self.data.ab4_dt),
         )
+        # The shape of Omega should be (n_timestep, n_omega)
         Omega = jnp.concatenate([Omega_0[jnp.newaxis, :], Omega_rk4, Omega], axis=0)
+        
 
         # TODO end construction zone
 
@@ -791,38 +794,40 @@ class NRSur7dq4Model(eqx.Module):
             jax.vmap(self._get_coorb_params, in_axes=(None, 0))(q, Omega_interp)
         )
 
-        # TODO need to work out how to vmap this later
-        inertial_h_lms = jnp.zeros(
-            (len(self.data.t_coorb), self.n_modes_extended), dtype=complex
-        )
+        return lambdas
 
-        for mode in self.modelist_dict.keys():
-            # get the coorb hlms
-            coorb_h_lm_plus, coorb_h_lm_minus = self.get_coorb_hlm(lambdas, mode=mode)
+        # # TODO need to work out how to vmap this later
+        # inertial_h_lms = jnp.zeros(
+        #     (len(self.data.t_coorb), self.n_modes_extended), dtype=complex
+        # )
 
-            # Multiply copressing mode by Wigner-D components (N_modes x times)
-            # Note that this also does the rotation of the quaternions into the inertial frame
-            inertial_h_lms += (
-                self.wigner_d_coefficients(
-                    Omega_interp[:, :4], Omega_interp[:, 4], mode
-                ).T
-                * coorb_h_lm_plus
-            ).T
-            inertial_h_lms += (
-                self.wigner_d_coefficients(
-                    Omega_interp[:, :4], Omega_interp[:, 4], (mode[0], -mode[1])
-                ).T
-                * coorb_h_lm_minus
-            ).T
+        # for mode in self.modelist_dict.keys():
+        #     # get the coorb hlms
+        #     coorb_h_lm_plus, coorb_h_lm_minus = self.get_coorb_hlm(lambdas, mode=mode)
 
-        # Sum along the N_modes axis with the spherical harmonics to generate strain as function of time
-        inertial_h = jnp.zeros(len(self.data.t_coorb), dtype=complex)
-        for idx in self.modelist_dict_extended.values():
-            # Note the LAL convention for the phasing
-            inertial_h += (
-                self.harmonics[idx](theta, jnp.pi / 2 - phi) * inertial_h_lms[:, idx]
-            )
+        #     # Multiply copressing mode by Wigner-D components (N_modes x times)
+        #     # Note that this also does the rotation of the quaternions into the inertial frame
+        #     inertial_h_lms += (
+        #         self.wigner_d_coefficients(
+        #             Omega_interp[:, :4], Omega_interp[:, 4], mode
+        #         ).T
+        #         * coorb_h_lm_plus
+        #     ).T
+        #     inertial_h_lms += (
+        #         self.wigner_d_coefficients(
+        #             Omega_interp[:, :4], Omega_interp[:, 4], (mode[0], -mode[1])
+        #         ).T
+        #         * coorb_h_lm_minus
+        #     ).T
 
-        # TODO: Add interpolation on time grid
+        # # Sum along the N_modes axis with the spherical harmonics to generate strain as function of time
+        # inertial_h = jnp.zeros(len(self.data.t_coorb), dtype=complex)
+        # for idx in self.modelist_dict_extended.values():
+        #     # Note the LAL convention for the phasing
+        #     inertial_h += (
+        #         self.harmonics[idx](theta, jnp.pi / 2 - phi) * inertial_h_lms[:, idx]
+        #     )
 
-        return inertial_h, Omega_interp
+        # # TODO: Add interpolation on time grid
+
+        # return inertial_h, Omega_interp
