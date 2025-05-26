@@ -46,7 +46,7 @@ def load_data(url: str, local_filename: str) -> h5py.File:
         print("Try loading file from cache")
         data = h5py.File(home_directory + "/.jaxNRSur/"+ local_filename, "r")
         print("Cache found and loading data")
-    except:
+    except FileNotFoundError:
         print("Cache not found, downloading from Zenodo")
         downloaded = download_from_zenodo(
             url,

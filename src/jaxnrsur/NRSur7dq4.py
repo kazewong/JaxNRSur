@@ -7,7 +7,7 @@ from jaxnrsur.Harmonics import SpinWeightedSphericalHarmonics
 from jaxnrsur.DataLoader import load_data, h5Group_to_dict
 from jaxnrsur.special_function import comb
 from jaxnrsur.PolyPredictor import PolyPredictor, evaluate_ensemble, evaluate_ensemble_dynamics, make_polypredictor_ensemble
-from jaxtyping import Array, Float, Int
+from jaxtyping import Array, Float
 import equinox as eqx
 
 
