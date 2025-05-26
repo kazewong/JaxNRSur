@@ -316,7 +316,7 @@ class NRSur7dq4Model(eqx.Module):
                 Omega[7],
                 Omega[8] * cp + Omega[9] * sp,
                 -Omega[8] * sp + Omega[9] * cp,
-                Omega[10]
+                Omega[10],
             ]
         )
 
@@ -570,13 +570,13 @@ class NRSur7dq4Model(eqx.Module):
         return h_lm_plus, h_lm_minus
 
     @staticmethod
-    @partial(jax.vmap, in_axes=(None, None, 1))
+    @partial(jax.vmap, in_axes=(None, 1, None))
     def interp_omega(
         time_grid: Float[Array, " n_grid"],
-        time: Float[Array, " n_sample"],
         Omega: Float[Array, " n_grid n_omega"],
+        time_interp: Float[Array, " n_sample"],
     ) -> Float[Array, " n_sample n_omega"]:
-        return CubicSpline(time_grid, Omega)(time)
+        return CubicSpline(time_grid, Omega)(time_interp)
 
     @staticmethod
     def multiply_quats(q1, q2):
@@ -614,7 +614,7 @@ class NRSur7dq4Model(eqx.Module):
                 jnp.cos(orbphase / 2.0),
                 0.0 * orbphase,
                 0.0 * orbphase,
-                jnp.sin(orbp_interphase / 2.0),
+                jnp.sin(orbphase / 2.0),
             ]
         ).T
         quat_full = self.multiply_quats(quat, quat_rot).T
@@ -769,13 +769,14 @@ class NRSur7dq4Model(eqx.Module):
         )
         # The shape of Omega should be (n_timestep, n_omega)
         Omega = jnp.concatenate([Omega_0[jnp.newaxis, :], Omega_rk4, Omega], axis=0)
-        
 
         # TODO end construction zone
 
         # Interpolating to the coorbital time array
         Omega_interp = self.interp_omega(
-            self.data.t_ds_array, self.data.t_coorb, Omega
+            self.data.t_ds_array,
+            Omega,
+            self.data.t_coorb,
         ).T
 
         # Normalizing the quaternions after interpolation
@@ -794,40 +795,38 @@ class NRSur7dq4Model(eqx.Module):
             jax.vmap(self._get_coorb_params, in_axes=(None, 0))(q, Omega_interp)
         )
 
-        return lambdas
+        # TODO need to work out how to vmap this later
+        inertial_h_lms = jnp.zeros(
+            (len(self.data.t_coorb), self.n_modes_extended), dtype=complex
+        )
 
-        # # TODO need to work out how to vmap this later
-        # inertial_h_lms = jnp.zeros(
-        #     (len(self.data.t_coorb), self.n_modes_extended), dtype=complex
-        # )
+        for mode in self.modelist_dict.keys():
+            # get the coorb hlms
+            coorb_h_lm_plus, coorb_h_lm_minus = self.get_coorb_hlm(lambdas, mode=mode)
 
-        # for mode in self.modelist_dict.keys():
-        #     # get the coorb hlms
-        #     coorb_h_lm_plus, coorb_h_lm_minus = self.get_coorb_hlm(lambdas, mode=mode)
+            # Multiply copressing mode by Wigner-D components (N_modes x times)
+            # Note that this also does the rotation of the quaternions into the inertial frame
+            inertial_h_lms += (
+                self.wigner_d_coefficients(
+                    Omega_interp[:, :4], Omega_interp[:, 4], mode
+                ).T
+                * coorb_h_lm_plus
+            ).T
+            inertial_h_lms += (
+                self.wigner_d_coefficients(
+                    Omega_interp[:, :4], Omega_interp[:, 4], (mode[0], -mode[1])
+                ).T
+                * coorb_h_lm_minus
+            ).T
 
-        #     # Multiply copressing mode by Wigner-D components (N_modes x times)
-        #     # Note that this also does the rotation of the quaternions into the inertial frame
-        #     inertial_h_lms += (
-        #         self.wigner_d_coefficients(
-        #             Omega_interp[:, :4], Omega_interp[:, 4], mode
-        #         ).T
-        #         * coorb_h_lm_plus
-        #     ).T
-        #     inertial_h_lms += (
-        #         self.wigner_d_coefficients(
-        #             Omega_interp[:, :4], Omega_interp[:, 4], (mode[0], -mode[1])
-        #         ).T
-        #         * coorb_h_lm_minus
-        #     ).T
+        # Sum along the N_modes axis with the spherical harmonics to generate strain as function of time
+        inertial_h = jnp.zeros(len(self.data.t_coorb), dtype=complex)
+        for idx in self.modelist_dict_extended.values():
+            # Note the LAL convention for the phasing
+            inertial_h += (
+                self.harmonics[idx](theta, jnp.pi / 2 - phi) * inertial_h_lms[:, idx]
+            )
 
-        # # Sum along the N_modes axis with the spherical harmonics to generate strain as function of time
-        # inertial_h = jnp.zeros(len(self.data.t_coorb), dtype=complex)
-        # for idx in self.modelist_dict_extended.values():
-        #     # Note the LAL convention for the phasing
-        #     inertial_h += (
-        #         self.harmonics[idx](theta, jnp.pi / 2 - phi) * inertial_h_lms[:, idx]
-        #     )
+        # TODO: Add interpolation on time grid
 
-        # # TODO: Add interpolation on time grid
-
-        # return inertial_h, Omega_interp
+        return inertial_h, Omega_interp
