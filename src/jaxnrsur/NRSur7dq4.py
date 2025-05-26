@@ -17,13 +17,12 @@ class NRSur7dq4DataLoader(eqx.Module):
     diff_t_ds: Float[Array, " n_dynam"]
 
     modes: list[dict]
-    coorb: PolyPredictor
     rk4_predictor: PolyPredictor
+    rk4_dt: Float[Array, " n_rk_steps"]
     ab4_predictor: PolyPredictor
+    ab4_dt: Float[Array, " n_ab4_steps"]
+    n_max: int
 
-    @property
-    def coorb_nmax(self) -> int:
-        return self.coorb.n_max
 
     def __init__(
         self,
@@ -76,10 +75,50 @@ class NRSur7dq4DataLoader(eqx.Module):
                 self.read_single_mode(data, modelist[i], n_max=basis_nmax)
             )
 
+        assert (coorb_nmax == basis_nmax), "coorb_nmax must equal to basis_nmax"
+        self.n_max = coorb_nmax
+
         # TODO: Remove the following self.coorb poly predictor
-        self.coorb = self.read_coorb(data, coorb_nmax)
+        coorb = self.read_coorb(data, coorb_nmax)
+        predictors_parameters, n_max = eqx.partition(coorb, eqx.is_array)
+
         # TODO: Initialize rk4_polypredictor
+
+        n_steps = 3
+        rk4_coefs = predictors_parameters.coefs
+        rk4_bfOrders = predictors_parameters.bfOrders
+
+        rk4_coefs = rk4_coefs[jnp.array([[0,1,1,2], [2,3,3,4], [4,5,5,6]])]
+        rk4_bfOrders = rk4_bfOrders[jnp.array([[0,1,1,2], [2,3,3,4], [4,5,5,6]])]
+        self.rk4_dt = self.diff_t_ds[:2*n_steps][jnp.array([[0,1,1,2], [2,3,3,4], [4,5,5,6]])]
+        t_ds_rk4 = self.t_ds[:2*n_steps:2]
+
+        predictor = eqx.filter_vmap(eqx.filter_vmap(in_axes=(0, 0, None))(make_polypredictor_ensemble), in_axes=(0, 0, None))(rk4_coefs, rk4_bfOrders, self.n_max)
+        predictor_parameters_new, n_max = eqx.partition(predictor, eqx.is_array)
+        self.rk4_predictor = predictor_parameters_new
+
         # TODO: Initialize ab4_polypredictor
+
+        # integral timestepper
+        # scan expect a function and initial stata, plus the data
+        # Building the new predictor with the first 6 timesteps cut off
+        ab4_coefs = predictors_parameters.coefs
+        ab4_bfOrders = predictors_parameters.bfOrders
+
+        ab4_coefs = ab4_coefs[2*n_steps:]
+        ab4_bfOrders = ab4_bfOrders[2*n_steps:]
+
+        
+        t_ds_ab4 = self.t_ds[2*n_steps:]
+        t_ds_array = jnp.concatenate([t_ds_rk4, t_ds_ab4])
+
+        dt_combined = jnp.diff(t_ds_array)
+
+        self.ab4_dt = dt_combined[jnp.array([[i-3, i-2, i-1, i] for i in range(n_steps, len(dt_combined))])]
+
+        predictor = eqx.filter_vmap(make_polypredictor_ensemble)(ab4_coefs, ab4_bfOrders, 100)
+        predictor_parameters_ab4, n_max = eqx.partition(predictor, eqx.is_array)
+
 
     def read_mode_function(self, node_data: dict, n_max: int) -> dict:
         result = {}
@@ -507,7 +546,7 @@ class NRSur7dq4Model(eqx.Module):
     def wigner_d_coefficients(
         self, 
         quat: Float[Array, " n_quat n_sample"],
-        orbphase: Float[Array, "n_sample"],
+        orbphase: Float[Array, " n_sample"],
         mode: tuple
         ) -> Float[Array, " n_modes n_sample"]:
 
@@ -576,28 +615,11 @@ class NRSur7dq4Model(eqx.Module):
         normA = jnp.linalg.norm(params[1:4])
         normB = jnp.linalg.norm(params[4:7])
 
-        predictors_parameters, n_max = eqx.partition(self.data.coorb, eqx.is_array)
         dt = self.data.diff_t_ds
 
         # TODO start construction zone
         # Start the timestepping process
         init_state = (Omega_0, q, normA, normB)
-
-        ############# Hacking predictor
-        n_steps = 3
-        new_coefs = predictors_parameters.coefs
-        new_bfOrders = predictors_parameters.bfOrders
-
-        new_coefs = new_coefs[jnp.array([[0,1,1,2], [2,3,3,4], [4,5,5,6]])]
-        new_bfOrders = new_bfOrders[jnp.array([[0,1,1,2], [2,3,3,4], [4,5,5,6]])]
-        new_dt = dt[:2*n_steps][jnp.array([[0,1,1,2], [2,3,3,4], [4,5,5,6]])]
-        t_ds_rk4 = self.data.t_ds[:2*n_steps:2]
-
-        predictor = eqx.filter_vmap(eqx.filter_vmap(in_axes=(0, 0, None))(make_polypredictor_ensemble), in_axes=(0, 0, None))(new_coefs, new_bfOrders, 100)
-        predictor_parameters_new, n_max = eqx.partition(predictor, eqx.is_array)
-
-        # RK4 for n_steps
-        ########### End hacking predictor
 
         # RK4 for 3 steps
         def RK4_kernel(
@@ -615,7 +637,7 @@ class NRSur7dq4Model(eqx.Module):
             return (Omega_next, q, normA, normB), (Omega_next, k_next)
         
 
-        state, (Omega_rk4, dOmega_dt_rk4) = jax.lax.scan(RK4_kernel, init_state, (predictor_parameters_new, new_dt))
+        state, (Omega_rk4, dOmega_dt_rk4) = jax.lax.scan(RK4_kernel, init_state, (self.data.rk4_predictor, self.data.rk4_dt))
 
         # AB4 for N-3 steps
         def timestepping_kernel(
@@ -634,25 +656,7 @@ class NRSur7dq4Model(eqx.Module):
             k_ab4 = jnp.concatenate((k_ab4[1:], k_next[jnp.newaxis,:]),axis=0)
             return (Omega, k_ab4, q, normA, normB), Omega_next
 
-        # integral timestepper
-        # scan expect a function and initial stata, plus the data
-        # Building the new predictor with the first 6 timesteps cut off
-        ab4_coefs = predictors_parameters.coefs
-        ab4_bfOrders = predictors_parameters.bfOrders
 
-        ab4_coefs = ab4_coefs[2*n_steps:]
-        ab4_bfOrders = ab4_bfOrders[2*n_steps:]
-
-        
-        t_ds_ab4 = self.data.t_ds[2*n_steps:]
-        t_ds_array = jnp.concatenate([t_ds_rk4, t_ds_ab4])
-
-        dt_combined = jnp.diff(t_ds_array)
-
-        dt_ab4 = dt_combined[jnp.array([[i-3, i-2, i-1, i] for i in range(n_steps, len(dt_combined))])]
-
-        predictor = eqx.filter_vmap(make_polypredictor_ensemble)(ab4_coefs, ab4_bfOrders, 100)
-        predictor_parameters_ab4, n_max = eqx.partition(predictor, eqx.is_array)
 
 
         init_state_AB4 = (Omega_rk4, dOmega_dt_rk4, q, normA, normB)
@@ -692,5 +696,7 @@ class NRSur7dq4Model(eqx.Module):
         for idx in self.modelist_dict_extended.values():
             # Note the LAL convention for the phasing
             inertial_h += self.harmonics[idx](theta, jnp.pi/2 - phi) * inertial_h_lms[:,idx]
+
+        # TODO: Add interpolation on time grid
 
         return inertial_h, Omega_interp
