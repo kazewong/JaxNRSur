@@ -26,7 +26,8 @@ class NRSur7dq4DataLoader(eqx.Module):
     rk4_dt: Float[Array, " n_rk_steps"]
     ab4_predictor: PolyPredictor
     ab4_dt: Float[Array, " n_ab4_steps"]
-    n_max: int
+    n_max: PolyPredictor
+    t_ds_array: Float[Array, " n_samples"]
 
     def __init__(
         self,
@@ -83,11 +84,11 @@ class NRSur7dq4DataLoader(eqx.Module):
             )
 
         assert coorb_nmax == basis_nmax, "coorb_nmax must equal to basis_nmax"
-        self.n_max = coorb_nmax
 
         # TODO: Remove the following self.coorb poly predictor
         coorb = self.read_coorb(data, coorb_nmax)
         predictors_parameters, n_max = eqx.partition(coorb, eqx.is_array)
+        self.n_max = n_max
 
         # TODO: Initialize rk4_polypredictor
 
@@ -107,7 +108,7 @@ class NRSur7dq4DataLoader(eqx.Module):
         predictor = eqx.filter_vmap(
             eqx.filter_vmap(in_axes=(0, 0, None))(make_polypredictor_ensemble),
             in_axes=(0, 0, None),
-        )(rk4_coefs, rk4_bfOrders, self.n_max)
+        )(rk4_coefs, rk4_bfOrders, coorb_nmax)
         predictor_parameters_new, n_max = eqx.partition(predictor, eqx.is_array)
         self.rk4_predictor = predictor_parameters_new
 
@@ -137,6 +138,7 @@ class NRSur7dq4DataLoader(eqx.Module):
             ab4_coefs, ab4_bfOrders, 100
         )
         predictor_parameters_ab4, n_max = eqx.partition(predictor, eqx.is_array)
+        self.ab4_predictor = predictor_parameters_ab4
 
     def read_mode_function(self, node_data: dict, n_max: int) -> dict:
         result = {}
