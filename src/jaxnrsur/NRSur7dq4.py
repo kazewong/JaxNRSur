@@ -286,17 +286,17 @@ class NRSur7dq4Model(eqx.Module):
         self.modelist_dict_extended = {}
         idx = 0
         for i, mode in enumerate(modelist):
-            self.modelist_dict_extended[mode] = idx
+            self.modelist_dict_extended[idx] = mode
             idx += 1
 
             if mode[1] > 0:
                 negative_mode = (mode[0], -mode[1])
-                self.modelist_dict_extended[negative_mode] = idx
+                self.modelist_dict_extended[idx] = negative_mode
                 idx += 1
 
         self.n_modes_extended = len(self.modelist_dict_extended.keys())
 
-        for mode in list(self.modelist_dict_extended.keys()):
+        for mode in list(self.modelist_dict_extended.values()):
             self.harmonics.append(SpinWeightedSphericalHarmonics(-2, mode[0], mode[1]))
 
     def _get_coorb_params(
@@ -646,26 +646,24 @@ class NRSur7dq4Model(eqx.Module):
 
         # Handling the if statements, additionally using. a Dirac delta to ensure the ells match
         ell_p, m_p = mode
-        for (ell, m), i in self.modelist_dict_extended.items():
 
-            matrix_coefs = matrix_coefs.at[:, i].set(
-                jax.lax.select(
-                    i2,
-                    float(ell_p == ell)
-                    * float(m_p == -m)
-                    * R_B ** (2 * m)
-                    * (-1) ** (ell + m - 1),
-                    matrix_coefs[:, i],
-                )
+        def wigner_d_kernel(ell, m):
+            result = jnp.zeros(quat_inv.shape[0], dtype=complex)
+            result = jax.lax.select(
+                i2,
+                (ell_p == ell).astype(float)
+                * (m_p == -m).astype(float)
+                * R_B ** (2 * m)
+                * (-1) ** (ell + m - 1),
+                result,
             )
-            matrix_coefs = matrix_coefs.at[:, i].set(
-                jax.lax.select(
-                    i3,
-                    float(ell_p == ell) * float(m_p == m) * R_A ** (2 * m),
-                    matrix_coefs[:, i],
-                )
+            result = jax.lax.select(
+                i3,
+                (ell_p == ell).astype(float)
+                * (m_p == m).astype(float)
+                * R_A ** (2 * m),
+                result,
             )
-
             factor = jax.lax.select(
                 i1,
                 jnp.abs(R_A) ** (2 * ell - 2 * m)
@@ -677,28 +675,29 @@ class NRSur7dq4Model(eqx.Module):
                 ),
                 jnp.zeros(R_A.shape).astype(jnp.complexfloating),
             )
-            summation = jnp.sum(
-                jnp.array(
-                    [
-                        jax.lax.select(
+            summation = jax.lax.while_loop(
+                lambda data: data[0] <= jnp.minimum(ell + m_p, ell - m),
+                lambda data: (data[0]+1, data[1] + jax.lax.select(
                             i1,
-                            (-1) ** rho
-                            * comb(ell + m_p, rho)
-                            * comb(ell - m_p, ell - rho - m)
-                            * abs_R_ratio ** (2 * rho),
+                            (-1) ** data[0]
+                            * comb(ell + m_p, data[0])
+                            * comb(ell - m_p, ell - data[0] - m)
+                            * abs_R_ratio ** (2 * data[0]),
                             jnp.zeros(abs_R_ratio.shape),
-                        )
-                        for rho in range(max(0, m_p - m), min(ell + m_p, ell - m) + 1)
-                    ]
-                ),
-                axis=0,
+                        )),
+                (jnp.maximum(0, m_p - m), jnp.zeros(abs_R_ratio.shape))
             )
+            
+            result = jax.lax.select(
+                i1, (ell_p == ell).astype(float) * factor * summation[1], result
+            )
+            return result
 
-            matrix_coefs = matrix_coefs.at[:, i].set(
-                jax.lax.select(
-                    i1, float(ell_p == ell) * factor * summation, matrix_coefs[:, i]
-                )
-            )
+        # TODO: Find a more jax way to extract the modes
+        ells = jnp.array([x[0] for x in self.modelist_dict_extended.values()])
+        ms = jnp.array([x[1] for x in self.modelist_dict_extended.values()])
+
+        matrix_coefs = jax.vmap(wigner_d_kernel)(ells, ms).T
 
         # Check the gradient of this (masking out nans)
         matrix_coefs = jax.lax.select(
@@ -846,7 +845,7 @@ class NRSur7dq4Model(eqx.Module):
 
         # Sum along the N_modes axis with the spherical harmonics to generate strain as function of time
         inertial_h = jnp.zeros(len(self.data.t_coorb), dtype=complex)
-        for idx in self.modelist_dict_extended.values():
+        for idx in self.modelist_dict_extended.keys():
             # Note the LAL convention for the phasing
             inertial_h += (
                 self.harmonics[idx](theta, jnp.pi / 2 - phi) * inertial_h_lms[:, idx]
