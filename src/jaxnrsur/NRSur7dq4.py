@@ -536,6 +536,9 @@ class NRSur7dq4Model(eqx.Module):
         # (although they are confusingly labeled "plus" and "minus" in
         # the file)
         idx = self.modelist_dict[mode]
+
+        # TODO: Convert the dictionary into a PyTree class,
+        # say ModeData, should allow vmapping over modes
         h_lm_sum = self.construct_hlm_from_bases(
             lambdas[self.data.modes[idx]["real_plus"]["node_indices"]],
             self.data.modes[idx]["real_plus"]["predictors"],
@@ -729,7 +732,6 @@ class NRSur7dq4Model(eqx.Module):
         normA = jnp.linalg.norm(params[1:4])
         normB = jnp.linalg.norm(params[4:7])
 
-        # TODO start construction zone
         # Start the timestepping process
         init_state = (Omega_0, q, normA, normB)
 
@@ -753,7 +755,7 @@ class NRSur7dq4Model(eqx.Module):
         )
 
         # AB4 for N-3 steps
-        def timestepping_kernel(
+        def AB3_kernel(
             carry: tuple[
                 Float[Array, " 4 n_Omega"],
                 Float[Array, " 3 n_Omega"],
@@ -784,14 +786,12 @@ class NRSur7dq4Model(eqx.Module):
 
         init_state_AB4 = (Omega_rk4, dOmega_dt_rk4, q, normA, normB)
         state, Omega = jax.lax.scan(
-            timestepping_kernel,
+            AB3_kernel,
             init_state_AB4,
             (self.data.ab4_predictor, self.data.ab4_dt),
         )
         # The shape of Omega should be (n_timestep, n_omega)
         Omega = jnp.concatenate([Omega_0[jnp.newaxis, :], Omega_rk4, Omega], axis=0)
-
-        # TODO end construction zone
 
         # Interpolating to the coorbital time array
         Omega_interp = self.interp_omega(
