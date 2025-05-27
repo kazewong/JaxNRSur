@@ -634,9 +634,11 @@ class NRSur7dq4Model(eqx.Module):
         R_A_small = jnp.abs(R_A) < 1e-12
         R_B_small = jnp.abs(R_B) < 1e-12
 
-        i1 = jnp.where((1 - R_A_small) * (1 - R_B_small))
-        i2 = jnp.where(R_A_small)
-        i3 = jnp.where((1 - R_A_small) * R_B_small)
+        # The if condition are turned in a lot of vmapped. We should investigate
+        # the performance implication
+        i1 = (1 - R_A_small) * (1 - R_B_small)
+        i2 = R_A_small
+        i3 = (1 - R_A_small) * R_B_small
 
         matrix_coefs = jnp.zeros(
             (quat_inv.shape[0], self.n_modes_extended), dtype=complex
@@ -646,44 +648,64 @@ class NRSur7dq4Model(eqx.Module):
         ell_p, m_p = mode
         for (ell, m), i in self.modelist_dict_extended.items():
 
-            matrix_coefs = matrix_coefs.at[i2, i].set(
-                float(ell_p == ell)
-                * float(m_p == -m)
-                * R_B[i2] ** (2 * m)
-                * (-1) ** (ell + m - 1)
+            matrix_coefs = matrix_coefs.at[:, i].set(
+                jax.lax.select(
+                    i2,
+                    float(ell_p == ell)
+                    * float(m_p == -m)
+                    * R_B ** (2 * m)
+                    * (-1) ** (ell + m - 1),
+                    matrix_coefs[:, i],
+                )
             )
-            matrix_coefs = matrix_coefs.at[i3, i].set(
-                float(ell_p == ell) * float(m_p == m) * R_A[i3] ** (2 * m)
+            matrix_coefs = matrix_coefs.at[:, i].set(
+                jax.lax.select(
+                    i3,
+                    float(ell_p == ell) * float(m_p == m) * R_A ** (2 * m),
+                    matrix_coefs[:, i],
+                )
             )
 
-            factor = (
-                jnp.abs(R_A[i1]) ** (2 * ell - 2 * m)
-                * R_A[i1] ** (m + m_p)
-                * R_B[i1] ** (m - m_p)
+            factor = jax.lax.select(
+                i1,
+                jnp.abs(R_A) ** (2 * ell - 2 * m)
+                * R_A ** (m + m_p)
+                * R_B ** (m - m_p)
                 * jnp.sqrt(
                     (factorial(ell + m) * (factorial(ell - m)))
                     / (factorial(ell + m_p) * (factorial(ell - m_p)))
-                )
+                ),
+                jnp.zeros(R_A.shape).astype(jnp.complexfloating),
             )
             summation = jnp.sum(
                 jnp.array(
                     [
-                        (-1) ** rho
-                        * comb(ell + m_p, rho)
-                        * comb(ell - m_p, ell - rho - m)
-                        * abs_R_ratio[i1] ** (2 * rho)
+                        jax.lax.select(
+                            i1,
+                            (-1) ** rho
+                            * comb(ell + m_p, rho)
+                            * comb(ell - m_p, ell - rho - m)
+                            * abs_R_ratio ** (2 * rho),
+                            jnp.zeros(abs_R_ratio.shape),
+                        )
                         for rho in range(max(0, m_p - m), min(ell + m_p, ell - m) + 1)
                     ]
                 ),
                 axis=0,
             )
 
-            matrix_coefs = matrix_coefs.at[i1, i].set(
-                float(ell_p == ell) * factor * summation
+            matrix_coefs = matrix_coefs.at[:, i].set(
+                jax.lax.select(
+                    i1, float(ell_p == ell) * factor * summation, matrix_coefs[:, i]
+                )
             )
 
         # Check the gradient of this (masking out nans)
-        matrix_coefs = matrix_coefs.at[jnp.isnan(matrix_coefs)].set(0.0)
+        matrix_coefs = jax.lax.select(
+            jnp.isnan(matrix_coefs),
+            jnp.zeros(matrix_coefs.shape).astype(jnp.complexfloating),
+            matrix_coefs,
+        )
 
         return matrix_coefs
 
