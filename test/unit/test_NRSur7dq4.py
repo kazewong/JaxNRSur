@@ -26,3 +26,6 @@ class TestNRSur7dq4:
 
     def test_wignerD_jittable(self):
         pass
+
+    def test_gradient(self):
+        pass

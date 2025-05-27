@@ -801,6 +801,9 @@ class NRSur7dq4Model(eqx.Module):
             self.data.t_coorb,
         ).T
 
+        # TODO: The gradient of the waveform doesn't work yet.
+        # It seems to have problems with lineax
+
         # Normalizing the quaternions after interpolation
         Omega_interp = Omega_interp.at[:, :4].set(
             (
