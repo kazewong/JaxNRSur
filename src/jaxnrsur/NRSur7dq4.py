@@ -15,13 +15,70 @@ from jaxnrsur.PolyPredictor import (
 from jaxtyping import Array, Float
 import equinox as eqx
 
+class NRSur7dq4ModeFunction(eqx.Module):
+    predictors: PolyPredictor
+    eim_basis: Float[Array, " n_nodes n_sample"]
+    node_indices: Float[Array, " n_nodes"]
+
+    @property
+    def n_nodes(self) -> int:
+        return len(self.node_indices)
+    
+    def __init__(
+        self,
+        predictors: PolyPredictor,
+        eim_basis: Float[Array, " n_nodes n_sample"],
+        node_indices: Float[Array, " n_nodes"],
+    ) -> None:
+        """
+        Initialize the mode functions with predictors, EIM basis, and node indices.
+        Args:
+            predictors (PolyPredictor): The polynomial predictors for the mode.
+            eim_basis (Float[Array, " n_nodes n_sample"]): The EIM basis for the mode.
+            node_indices (Float[Array, " n_nodes"]): The indices of the nodes in the EIM basis.
+        """
+        self.predictors = predictors
+        self.eim_basis = eim_basis
+        self.node_indices = node_indices
+    
+class NRSur7dq4Mode:
+    real_plus: NRSur7dq4ModeFunction
+    imag_plus: NRSur7dq4ModeFunction
+    real_minus: NRSur7dq4ModeFunction
+    imag_minus: NRSur7dq4ModeFunction
+    mode: tuple[int, int]
+
+    def __init__(
+        self,
+        real_plus: NRSur7dq4ModeFunction,
+        imag_plus: NRSur7dq4ModeFunction,
+        real_minus: NRSur7dq4ModeFunction,
+        imag_minus: NRSur7dq4ModeFunction,
+        mode: tuple[int, int],
+    ) -> None:
+        """
+        Initialize the modes with their respective functions and mode tuple.
+        
+        Args:
+            real_plus (NRSur7dq4ModeFunctions): The real part of the plus mode.
+            imag_plus (NRSur7dq4ModeFunctions): The imaginary part of the plus mode.
+            real_minus (NRSur7dq4ModeFunctions): The real part of the minus mode.
+            imag_minus (NRSur7dq4ModeFunctions): The imaginary part of the minus mode.
+            mode (tuple[int, int]): The mode tuple (l, m).
+        """
+        self.real_plus = real_plus
+        self.imag_plus = imag_plus
+        self.real_minus = real_minus
+        self.imag_minus = imag_minus
+        self.mode = mode
+            
 
 class NRSur7dq4DataLoader(eqx.Module):
     t_coorb: Float[Array, " n_sample"]
     t_ds: Float[Array, " n_dynam"]
     diff_t_ds: Float[Array, " n_dynam"]
 
-    modes: list[dict]
+    modes: list[NRSur7dq4Mode]
     rk4_predictor: PolyPredictor
     rk4_dt: Float[Array, " n_rk_steps"]
     ab4_predictor: PolyPredictor
@@ -140,10 +197,8 @@ class NRSur7dq4DataLoader(eqx.Module):
         predictor_parameters_ab4, n_max = eqx.partition(predictor, eqx.is_array)
         self.ab4_predictor = predictor_parameters_ab4
 
-    def read_mode_function(self, node_data: dict, n_max: int) -> dict:
-        result = {}
-        n_nodes = len(node_data["nodeIndices"])  # type: ignore
-        result["n_nodes"] = n_nodes
+    def read_mode_function(self, node_data: dict, n_max: int) -> NRSur7dq4ModeFunction:
+        n_nodes = len(node_data["nodeIndices"])
 
         coefs = []
         bfOrders = []
@@ -155,37 +210,40 @@ class NRSur7dq4DataLoader(eqx.Module):
             coefs.append(jnp.pad(coef, (0, n_max - len(coef))))
             bfOrders.append(jnp.pad(bfOrder, ((0, n_max - len(bfOrder)), (0, 0))))
 
-        result["predictors"] = make_polypredictor_ensemble(
+        predictors = make_polypredictor_ensemble(
             jnp.array(coefs), jnp.array(bfOrders), n_max
         )
-        result["eim_basis"] = jnp.array(node_data["EIBasis"])
-        result["node_indices"] = jnp.array(node_data["nodeIndices"])
-        return result
+        eim_basis = jnp.array(node_data["EIBasis"])
+        node_indices = jnp.array(node_data["nodeIndices"])
+        return NRSur7dq4ModeFunction(
+            predictors=predictors,
+            eim_basis=eim_basis,
+            node_indices=node_indices,
+        )
 
-    def read_single_mode(self, file: dict, mode: tuple[int, int], n_max: int) -> dict:
-        result = {}
+    def read_single_mode(self, file: dict, mode: tuple[int, int], n_max: int) -> NRSur7dq4Mode:
         if mode[1] > 0:
-            result["real_plus"] = self.read_mode_function(
+            real_plus = self.read_mode_function(
                 file[f"hCoorb_{mode[0]}_{mode[1]}_Re+"], n_max
             )
-            result["imag_plus"] = self.read_mode_function(
+            imag_plus = self.read_mode_function(
                 file[f"hCoorb_{mode[0]}_{mode[1]}_Im+"], n_max
             )
-            result["real_minus"] = self.read_mode_function(
+            real_minus = self.read_mode_function(
                 file[f"hCoorb_{mode[0]}_{mode[1]}_Re-"], n_max
             )
-            result["imag_minus"] = self.read_mode_function(
+            imag_minus = self.read_mode_function(
                 file[f"hCoorb_{mode[0]}_{mode[1]}_Im-"], n_max
             )
         else:
-            result["real_plus"] = self.read_mode_function(
+            real_plus = self.read_mode_function(
                 file[f"hCoorb_{mode[0]}_{mode[1]}_real"], n_max
             )
             # result['real_minus'] = 0
             # TODO Make the structure of the m=0 modes similar
             # to hangle in the same way as m != 0
 
-            result["imag_plus"] = self.read_mode_function(
+            imag_plus = self.read_mode_function(
                 file[f"hCoorb_{mode[0]}_{mode[1]}_imag"], n_max
             )
 
@@ -197,12 +255,16 @@ class NRSur7dq4DataLoader(eqx.Module):
                 "nodeIndices": jnp.array([0]),
                 "EIBasis": jnp.array([0]),
             }
-            result["real_minus"] = self.read_mode_function(node_data, 1)
-            result["imag_minus"] = self.read_mode_function(node_data, 1)
+            real_minus = self.read_mode_function(node_data, 1)
+            imag_minus = self.read_mode_function(node_data, 1)
 
-        result["mode"] = mode
-
-        return result
+        return NRSur7dq4Mode(
+            real_plus=real_plus,
+            imag_plus=imag_plus,
+            real_minus=real_minus,
+            imag_minus=imag_minus,
+            mode=mode,
+        )
 
     def read_coorb(self, file: dict, n_max: int) -> PolyPredictor:
         result = []
@@ -281,7 +343,7 @@ class NRSur7dq4Model(eqx.Module):
         self.n_modes = len(modelist)
         self.modelist_dict = {}
         for i, mode in enumerate(modelist):
-            self.modelist_dict[mode] = i
+            self.modelist_dict[i] = mode
 
         self.modelist_dict_extended = {}
         idx = 0
@@ -529,34 +591,33 @@ class NRSur7dq4Model(eqx.Module):
 
         return jnp.dot(evaluate_ensemble(predictor, lambdas), eim_basis)
 
-    def get_coorb_hlm(self, lambdas, mode=(2, 2)):
+    def get_coorb_hlm(self, lambdas, mode: NRSur7dq4Mode):
 
         # surrogate is built on the symmetric (sum) and antisymmetric (diff)
         # combinations of the +|m| and -|m| modes
         # (although they are confusingly labeled "plus" and "minus" in
         # the file)
-        idx = self.modelist_dict[mode]
 
         # TODO: Convert the dictionary into a PyTree class,
         # say ModeData, should allow vmapping over modes
         h_lm_sum = self.construct_hlm_from_bases(
-            lambdas[self.data.modes[idx]["real_plus"]["node_indices"]],
-            self.data.modes[idx]["real_plus"]["predictors"],
-            self.data.modes[idx]["real_plus"]["eim_basis"],
+            lambdas[mode.real_plus.node_indices],
+            mode.real_plus.predictors,
+            mode.real_plus.eim_basis,
         ) + 1j * self.construct_hlm_from_bases(
-            lambdas[self.data.modes[idx]["imag_plus"]["node_indices"]],
-            self.data.modes[idx]["imag_plus"]["predictors"],
-            self.data.modes[idx]["imag_plus"]["eim_basis"],
+            lambdas[mode.imag_plus.node_indices],
+            mode.imag_plus.predictors,
+            mode.imag_plus.eim_basis,
         )
 
         h_lm_diff = self.construct_hlm_from_bases(
-            lambdas[self.data.modes[idx]["real_minus"]["node_indices"]],
-            self.data.modes[idx]["real_minus"]["predictors"],
-            self.data.modes[idx]["real_minus"]["eim_basis"],
+            lambdas[mode.real_minus.node_indices],
+            mode.real_minus.predictors,
+            mode.real_minus.eim_basis,
         ) + 1j * self.construct_hlm_from_bases(
-            lambdas[self.data.modes[idx]["imag_minus"]["node_indices"]],
-            self.data.modes[idx]["imag_minus"]["predictors"],
-            self.data.modes[idx]["imag_minus"]["eim_basis"],
+            lambdas[mode.imag_minus.node_indices],
+            mode.imag_minus.predictors,
+            mode.imag_minus.eim_basis,
         )
 
         # Eq. 6 in https://arxiv.org/pdf/1905.09300.pdf
@@ -824,21 +885,21 @@ class NRSur7dq4Model(eqx.Module):
             (len(self.data.t_coorb), self.n_modes_extended), dtype=complex
         )
 
-        for mode in self.modelist_dict.keys():
+        for idx in self.modelist_dict.keys():
             # get the coorb hlms
-            coorb_h_lm_plus, coorb_h_lm_minus = self.get_coorb_hlm(lambdas, mode=mode)
+            coorb_h_lm_plus, coorb_h_lm_minus = self.get_coorb_hlm(lambdas, idx)
 
             # Multiply copressing mode by Wigner-D components (N_modes x times)
             # Note that this also does the rotation of the quaternions into the inertial frame
             inertial_h_lms += (
                 self.wigner_d_coefficients(
-                    Omega_interp[:, :4], Omega_interp[:, 4], mode
+                    Omega_interp[:, :4], Omega_interp[:, 4], self.modelist_dict[idx]
                 ).T
                 * coorb_h_lm_plus
             ).T
             inertial_h_lms += (
                 self.wigner_d_coefficients(
-                    Omega_interp[:, :4], Omega_interp[:, 4], (mode[0], -mode[1])
+                    Omega_interp[:, :4], Omega_interp[:, 4], (self.modelist_dict[idx][0], -self.modelist_dict[idx][1])
                 ).T
                 * coorb_h_lm_minus
             ).T
