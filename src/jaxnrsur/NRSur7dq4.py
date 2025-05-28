@@ -896,6 +896,7 @@ class NRSur7dq4Model(eqx.Module):
             (len(self.data.t_coorb), self.n_modes_extended), dtype=complex
         )
 
+        # Due to the varying number of nodes, there is no trivial way to vmap this
         coorb_hlm = jnp.array(jax.tree.map(
             lambda idx: self.get_coorb_hlm(lambdas, idx), list(self.modelist_dict.keys()))
         )
