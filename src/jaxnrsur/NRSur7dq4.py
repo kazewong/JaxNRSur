@@ -816,7 +816,7 @@ class NRSur7dq4Model(eqx.Module):
         )
 
         # AB4 for N-3 steps
-        def AB3_kernel(
+        def AB4_kernel(
             carry: tuple[
                 Float[Array, " 4 n_Omega"],
                 Float[Array, " 3 n_Omega"],
