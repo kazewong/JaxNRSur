@@ -847,7 +847,7 @@ class NRSur7dq4Model(eqx.Module):
 
         init_state_AB4 = (Omega_rk4, dOmega_dt_rk4, q, normA, normB)
         state, Omega = jax.lax.scan(
-            AB3_kernel,
+            AB4_kernel,
             init_state_AB4,
             (self.data.ab4_predictor, self.data.ab4_dt),
         )
