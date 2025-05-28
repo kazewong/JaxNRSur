@@ -37,6 +37,8 @@ build-backend = "hatchling.build"
 dev = [
     "jaxnrsur",
     "matplotlib>=3.10.3",
+    "ipykernel>=6.29.5",
+    "ipython>=9.2.0",
 ]
 
 docs = [
