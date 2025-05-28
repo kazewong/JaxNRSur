@@ -591,15 +591,15 @@ class NRSur7dq4Model(eqx.Module):
 
         return jnp.dot(evaluate_ensemble(predictor, lambdas), eim_basis)
 
-    def get_coorb_hlm(self, lambdas, mode: NRSur7dq4Mode):
+    def get_coorb_hlm(self, lambdas, idx: int):
 
         # surrogate is built on the symmetric (sum) and antisymmetric (diff)
         # combinations of the +|m| and -|m| modes
         # (although they are confusingly labeled "plus" and "minus" in
         # the file)
 
-        # TODO: Convert the dictionary into a PyTree class,
-        # say ModeData, should allow vmapping over modes
+        mode = self.data.modes[idx]
+
         h_lm_sum = self.construct_hlm_from_bases(
             lambdas[mode.real_plus.node_indices],
             mode.real_plus.predictors,
@@ -771,6 +771,17 @@ class NRSur7dq4Model(eqx.Module):
         )
 
         return matrix_coefs
+    
+    def mode_projection(
+        self,
+        hlm_plus: Float[Array, " n_sample"],
+        hlm_minus: Float[Array, " n_sample"],
+        quat: Float[Array, " n_quat n_sample"],
+        orbphase: Float[Array, " n_sample"],
+        mode: tuple[int, int],
+    ):
+        # Get the Wigner D coefficients
+        return (self.wigner_d_coefficients(quat, orbphase, mode).T * hlm_plus).T + (self.wigner_d_coefficients(quat, orbphase, (mode[0], -mode[1])).T * hlm_minus).T
 
     def get_waveform(
         self,
@@ -885,24 +896,22 @@ class NRSur7dq4Model(eqx.Module):
             (len(self.data.t_coorb), self.n_modes_extended), dtype=complex
         )
 
-        for idx in self.modelist_dict.keys():
-            # get the coorb hlms
-            coorb_h_lm_plus, coorb_h_lm_minus = self.get_coorb_hlm(lambdas, idx)
+        coorb_hlm = jnp.array(jax.tree.map(
+            lambda idx: self.get_coorb_hlm(lambdas, idx), list(self.modelist_dict.keys()))
+        )
 
-            # Multiply copressing mode by Wigner-D components (N_modes x times)
-            # Note that this also does the rotation of the quaternions into the inertial frame
-            inertial_h_lms += (
-                self.wigner_d_coefficients(
-                    Omega_interp[:, :4], Omega_interp[:, 4], self.modelist_dict[idx]
-                ).T
-                * coorb_h_lm_plus
-            ).T
-            inertial_h_lms += (
-                self.wigner_d_coefficients(
-                    Omega_interp[:, :4], Omega_interp[:, 4], (self.modelist_dict[idx][0], -self.modelist_dict[idx][1])
-                ).T
-                * coorb_h_lm_minus
-            ).T
+        hlm_projed = eqx.filter_vmap(
+            self.mode_projection,
+            in_axes=(0, 0, None, None, 0),
+        )(
+            coorb_hlm[:, 0],
+            coorb_hlm[:, 1],
+            Omega_interp[:, :4],
+            Omega_interp[:, 4],
+            jnp.array(list(self.modelist_dict.values())),
+        ).T
+
+        inertial_h_lms += jnp.sum(hlm_projed, axis=-1).T
 
         # Sum along the N_modes axis with the spherical harmonics to generate strain as function of time
         inertial_h = jnp.zeros(len(self.data.t_coorb), dtype=complex)
