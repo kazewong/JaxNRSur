@@ -11,7 +11,12 @@ Numerical relativity surrogate waveform in Jax
 # Quickstart
 
 ## Installation
-`pip install JaxNRSur`
+
+The recommended way to install `jaxNRSur` is via `uv`. `uv` is a python package and project manager that takes inspiration and is written in `rust`. You can find the installation instructions [here](https://docs.astral.sh/uv/getting-started/installation/).
+Once you have `uv` installed, you can install `jaxNRSur` with`uv add JaxNRSur` in the project you are developing.
+If you want to try this package out, clone this repository and cd into the directory, then run `uv sync --all-extras
+
+Alternatively, you can install `jaxNRSur` with `pip`: `pip install JaxNRSur`
 
 If you want to use GPU, you will need to install the CUDA version of jax as well with
 `pip install -U "jax[cuda12]"`
