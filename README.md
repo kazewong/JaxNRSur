@@ -26,7 +26,7 @@ If you want to use GPU, you will need to run `uv sync --all-extras` or `pip inst
 
 ```python
 import jax.numpy as jnp
-from jaxNRSur.SurrogateModel import NRHybSur3dq8Model
+from jaxnrsur.NRHybSur3dq8 import NRHybSur3dq8Model
 time = jnp.linspace(-1000, 100, 100000)
 params = jnp.array([0.9, 0.1, 0.1])
 model = NRHybSur3dq8Model()

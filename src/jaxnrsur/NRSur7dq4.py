@@ -23,7 +23,7 @@ class NRSur7dq4ModeFunction(eqx.Module):
     @property
     def n_nodes(self) -> int:
         return len(self.node_indices)
-    
+
     def __init__(
         self,
         predictors: PolyPredictor,
@@ -40,7 +40,7 @@ class NRSur7dq4ModeFunction(eqx.Module):
         self.predictors = predictors
         self.eim_basis = eim_basis
         self.node_indices = node_indices
-    
+
 class NRSur7dq4Mode:
     real_plus: NRSur7dq4ModeFunction
     imag_plus: NRSur7dq4ModeFunction
@@ -58,7 +58,7 @@ class NRSur7dq4Mode:
     ) -> None:
         """
         Initialize the modes with their respective functions and mode tuple.
-        
+
         Args:
             real_plus (NRSur7dq4ModeFunctions): The real part of the plus mode.
             imag_plus (NRSur7dq4ModeFunctions): The imaginary part of the plus mode.
@@ -71,7 +71,7 @@ class NRSur7dq4Mode:
         self.real_minus = real_minus
         self.imag_minus = imag_minus
         self.mode = mode
-            
+
 
 class NRSur7dq4DataLoader(eqx.Module):
     t_coorb: Float[Array, " n_sample"]
@@ -360,6 +360,17 @@ class NRSur7dq4Model(eqx.Module):
 
         for mode in list(self.modelist_dict_extended.values()):
             self.harmonics.append(SpinWeightedSphericalHarmonics(-2, mode[0], mode[1]))
+
+    def __call__(self,
+      time: Float[Array, " n_sample"],
+      params: Float[Array, " n_dim"],
+      theta: float = 0.0,
+      phi: float = 0.0,
+      # quaternions
+      init_quat: Float[Array, " n_quat"] = jnp.array([1.0, 0.0, 0.0, 0.0]),
+      init_orb_phase: float = 0.0,
+    ) -> tuple[Float[Array, " n_sample"], Float[Array, " n_sample"]]:
+      return self.get_waveform(time, params, theta, phi, init_quat, init_orb_phase)
 
     def _get_coorb_params(
         self, q: Float, Omega: Float[Array, " n_Omega"]
@@ -751,7 +762,7 @@ class NRSur7dq4Model(eqx.Module):
                         )),
                 (jnp.maximum(0, m_p - m), jnp.zeros(abs_R_ratio.shape))
             )
-            
+
             result = jax.lax.select(
                 i1, (ell_p == ell).astype(float) * factor * summation[1], result
             )
@@ -771,7 +782,7 @@ class NRSur7dq4Model(eqx.Module):
         )
 
         return matrix_coefs
-    
+
     def mode_projection(
         self,
         hlm_plus: Float[Array, " n_sample"],
