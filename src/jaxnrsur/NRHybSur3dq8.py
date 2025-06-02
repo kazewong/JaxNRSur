@@ -118,6 +118,7 @@ class NRHybSur3dq8Model(eqx.Module):
     data: NRHybSur3dq8DataLoader
     mode_no22: list[dict]
     harmonics: list[SpinWeightedSphericalHarmonics]
+    negative_harmonics: list[SpinWeightedSphericalHarmonics]
     mode_22_index: int
     m_mode: Int[Array, " n_modes-1"]
     negative_mode_prefactor: Int[Array, " n_modes-1"]
@@ -189,7 +190,7 @@ class NRHybSur3dq8Model(eqx.Module):
             params (Float[Array, " n_dim"]): Source parameters.
             theta (float, optional): Polar angle. Defaults to 0.0.
             phi (float, optional): Azimuthal angle. Defaults to 0.0.
-        
+
         """
         return self.get_waveform(time, params, theta, phi)
 
@@ -295,4 +296,3 @@ class NRHybSur3dq8Model(eqx.Module):
                 * self.negative_harmonics[i](theta, phi)
             )
         return waveform
-
