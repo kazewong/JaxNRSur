@@ -50,7 +50,7 @@ To use JIT to speed up the code, all you have to do is the following:
 
 ```python
 #Let's use NRSur7dq4 as an example
-model = NRHybSur3dq8()
+model = NRHybSur3dq8Model()
 jitted_model = eqx.filter_jit(model)
 h = jitted_model(time, params)
 ```
