@@ -369,7 +369,7 @@ class NRSur7dq4Model(eqx.Module):
       # quaternions
       init_quat: Float[Array, " n_quat"] = jnp.array([1.0, 0.0, 0.0, 0.0]),
       init_orb_phase: float = 0.0,
-    ) -> tuple[Float[Array, " n_sample"], Float[Array, " n_sample"]]:
+    ) -> Float[Array, " n_sample"]:
       return self.get_waveform(time, params, theta, phi, init_quat, init_orb_phase)
 
     def _get_coorb_params(
@@ -935,6 +935,6 @@ class NRSur7dq4Model(eqx.Module):
             )
 
         # TODO: Add interpolation on time grid
-        result = CubicSpline(self.data.t_coorb, inertial_h)(time)
+        # result = CubicSpline(self.data.t_coorb, inertial_h)(time)
 
-        return result
+        return inertial_h
