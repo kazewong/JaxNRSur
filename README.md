@@ -63,7 +63,7 @@ The next feature offered by `jax` is automatic differentiation. This allows us t
 
 ```python
 def target(time, params):
-  return jnp.sum(model(time, params))
+  return jnp.sum(model(time, params)).real
 
 grad_target_time = jax.grad(target, argnums=0)
 grad_target_params = jax.grad(target, argnums=1)
