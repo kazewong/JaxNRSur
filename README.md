@@ -16,7 +16,7 @@ The recommended way to install `jaxNRSur` is via `uv`. `uv` is a python package 
 Once you have `uv` installed, you can install `jaxNRSur` with`uv add JaxNRSur` in the project you are developing.
 If you want to try this package out, clone this repository and cd into the directory, then run `uv sync --dev` should produce an environment in the directory. The environment should have `.venv/bin/activate` which you can run `source .venv/bin/activate` to activate the environment.
 
-Alternatively, you can install `jaxNRSur` with `pip`: `pip install JaxNRSur`
+Alternatively, you can install `jaxNRSur` with `pip`: clone the repository, then do `pip install .`.
 
 If you want to use GPU, you will need to run `uv sync --all-extras` or `pip install -U "jax[cuda12]"` to install the version of `jax` which is compatible with an Nvidia GPU.
 
