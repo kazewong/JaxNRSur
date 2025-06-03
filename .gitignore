@@ -160,3 +160,4 @@ cython_debug/
 #.idea/
 
 *.h5
+*.npz

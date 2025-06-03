@@ -2,7 +2,6 @@ import jax.numpy as jnp
 from jaxtyping import Array, Float, Int, jaxtyped
 import equinox as eqx
 
-
 class PolyPredictor(eqx.Module):
     coefs: Float[Array, " n_sum"]
     bfOrders: Float[Array, " n_sum n_lambda"]
@@ -54,12 +53,6 @@ def evaluate_ensemble_dynamics(
     predictors: PolyPredictor, inputs: Float[Array, " n_lambda"]
 ) -> Float[Array, " n_predictor"]:
     return predictors(inputs)
-
-@eqx.filter_vmap(in_axes=(None, eqx.if_array(0))) # TODO this is not working. I need something where I can specify the index and iterate over all the specific output parameters 
-def evaluate_ensemble_dynamics_at_index(
-    predictors: PolyPredictor, inputs: Float[Array, " n_lambda"], index: int
-) -> Float[Array, " n_predictor"]:
-    return predictors.predict_at_index(inputs, predictors.coefs, predictors.bfOrders, index)
 
 @eqx.filter_vmap(in_axes=(eqx.if_array(0), eqx.if_array(0)))
 def evaluate_ensemble(

@@ -13,8 +13,10 @@ keywords = ["gravitational-wave", "Numerical relativity", "autodiff", "jax"]
 license = {text = "MIT"}
 dependencies = [
     "equinox>=0.12.1",
+    "h5py>=3.13.0",
     "jax>=0.6.0",
     "lineax>=0.0.8",
+    "requests>=2.32.3",
 ]
 
 [project.urls]
@@ -34,6 +36,11 @@ build-backend = "hatchling.build"
 [dependency-groups]
 dev = [
     "jaxnrsur",
+    "matplotlib>=3.10.3",
+    "ipykernel>=6.29.5",
+    "ipython>=9.2.0",
+    "tensorboard-plugin-profile>=2.19.6",
+    "tensorflow>=2.19.0",
 ]
 
 [tool.uv.sources]

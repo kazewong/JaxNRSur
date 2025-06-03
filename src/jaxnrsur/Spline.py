@@ -8,7 +8,7 @@ class CubicSpline:
     x_grid: Float[Array, " batch"]  # input x data
     y_grid: Float[Array, " n"]  # input y data
 
-    def __init__(self, x: Float[Array, " n"], y: Float[Array, " n"]) -> None:
+    def __init__(self, x: Float[Array, " n_grid"], y: Float[Array, " n_grid"]) -> None:
         self.x_grid = x
         self.diff_x = jnp.diff(x)
         self.y_grid = y
@@ -16,10 +16,10 @@ class CubicSpline:
         assert len(x) == len(y), "x and y must have the same length"
         self.coeff = self.build_rep(x, y)
 
-    def __call__(self, x: Float[Array, " n"]) -> Float[Array, " n"]:
+    def __call__(self, x: Float[Array, " n_interp"]) -> Float[Array, " n_interp"]:
         return self.get_value(x)
 
-    def get_value(self, x: Float[Array, " n"]) -> Float[Array, " n"]:
+    def get_value(self, x: Float[Array, " n_interp"]) -> Float[Array, " n_interp"]:
         bin = jnp.digitize(x, self.x_grid)
         result = (
             self.coeff[bin - 1]
@@ -62,7 +62,7 @@ class CubicSpline:
 
     @staticmethod
     @jax.jit
-    def build_rep(x: Float[Array, " n"], y: Float[Array, " n"]) -> Float[Array, " n"]:
+    def build_rep(x: Float[Array, " n_grid"], y: Float[Array, " n_grid"]) -> Float[Array, " n_grid"]:
         # TODO: Revise boundary condition
 
         """
