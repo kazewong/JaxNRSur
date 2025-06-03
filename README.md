@@ -71,15 +71,17 @@ grad_target_params = jax.grad(target, argnums=1)
 
 ### Vectorization
 
+`jax` offers the use of `vmap` to vectorize functions. This is different from a for loop considering `jax` will fuse some of the operations under the hood to achieve better performance. On a CPU this makes a small but noticible differences since modern day CPUs offers some vectorization capabilities, but where this really shines is on accelerators. From some initial microbenchmarks on a 5070Ti (16GB VRAM), the `NRSur7dq4` waveform can be evaluated for 500 parameters in ~300 ms.
+
+Similar to JIT, we need to use `eqx.filter_vmap` instead of `jax.jit` in our case. Another note is that `vmap` does not compile the code, so one needs to use `eqx.filter_jit` on top of `eqx.filter_vmap` to compile the code.
+
 ```python
-params_multi = jnp.array([[0.9, 0.1, 0.1]])
-params_multi = jnp.repeat(params_multi, 10, axis=0)
+params = jnp.array([[0.9, 0.1, 0.1]])
+params_multi = jnp.repeat(params, 10, axis=0)
 h_multi = eqx.filter_jit(eqx.filter_vmap(model.get_waveform, in_axes=(None, 0)))(
     time, params_multi
 )
 ```
-
-Soon, we will provide an interface for the user to interact with the surrogate data as well.
 
 ## Local data cache
 
