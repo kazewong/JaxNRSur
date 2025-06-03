@@ -33,15 +33,33 @@ model = NRHybSur3dq8Model()
 h = model(time, params)
 ```
 
+## Jax features
+
+### Automatic Differentiation
+
+### JIT Compilation
+
+### Vectorization
+
+```python
+params_multi = jnp.array([[0.9, 0.1, 0.1]])
+params_multi = jnp.repeat(params_multi, 10, axis=0)
+h_multi = eqx.filter_jit(eqx.filter_vmap(model.get_waveform, in_axes=(None, 0)))(
+    time, params_multi
+)
+```
+
 Soon, we will provide an interface for the user to interact with the surrogate data as well.
 
-## Surrogate data
+## Local data cache
 
-The data needed by the surrogate model will be downloaded and stored at `$HOME/.jaxNRSur`, and if it is already downloaded, then it will reuse the cached data
+If the data is not already downloaded, then this package will look for the data on `Zenodo` and download it into `$HOME/.jaxNRSur`.
+If the data is already downloaded, then the package will reuse the cached data
 
-# Benchmark
+<!-- # Benchmark
 
-Add benchmarking results here.
+Add benchmarking results here. -->
 
 # Attribution
 
+Coming soon. For now, give us a star and keep an eye out!
