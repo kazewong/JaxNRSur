@@ -794,9 +794,8 @@ class NRSur7dq4Model(eqx.Module):
         # Get the Wigner D coefficients
         return (self.wigner_d_coefficients(quat, orbphase, mode).T * hlm_plus).T + (self.wigner_d_coefficients(quat, orbphase, (mode[0], -mode[1])).T * hlm_minus).T
 
-    def get_waveform(
+    def get_geometric_waveform(
         self,
-        time: Float[Array, " n_sample"],
         params: Float[Array, " n_dim"],
         theta: float = 0.0,
         phi: float = 0.0,
