@@ -319,6 +319,7 @@ class NRSur7dq4Model(eqx.Module):
     harmonics: list[SpinWeightedSphericalHarmonics]
     n_modes: int
     n_modes_extended: int
+    max_lm: tuple[int,int]
 
     def __init__(
         self,
@@ -360,6 +361,8 @@ class NRSur7dq4Model(eqx.Module):
 
         for mode in list(self.modelist_dict_extended.values()):
             self.harmonics.append(SpinWeightedSphericalHarmonics(-2, mode[0], mode[1]))
+            
+        self.max_lm = (max([mode[0] for mode in modelist]), max([abs(mode[1]) for mode in modelist]))
 
     def __call__(self,
       time: Float[Array, " n_sample"],
@@ -750,21 +753,15 @@ class NRSur7dq4Model(eqx.Module):
                 ),
                 jnp.zeros(R_A.shape).astype(jnp.complexfloating),
             )
-            summation = jax.lax.while_loop(
-                lambda data: data[0] <= jnp.minimum(ell + m_p, ell - m),
-                lambda data: (data[0]+1, data[1] + jax.lax.select(
-                            i1,
-                            (-1) ** data[0]
-                            * comb(ell + m_p, data[0])
-                            * comb(ell - m_p, ell - data[0] - m)
-                            * abs_R_ratio ** (2 * data[0]),
-                            jnp.zeros(abs_R_ratio.shape),
-                        )),
-                (jnp.maximum(0, m_p - m), jnp.zeros(abs_R_ratio.shape))
-            )
+            rho = jnp.arange(0, self.max_lm[0] + self.max_lm[1] + 1)
+            comb_vmap = jax.vmap(comb, in_axes=(None, 0))
+            summation = (((-1) ** rho * comb_vmap(ell + m_p, rho) * comb_vmap(ell - m_p, ell - rho - m)) * abs_R_ratio[:, None] ** (2 * rho)).T
+            conditions = (rho >= jnp.array([0, m_p -m]).max()) * (rho <= jnp.array([ell + m_p, ell - m]).min())
+            summation = conditions[:, None] *summation
+            summation = jnp.sum(summation, axis=0)
 
             result = jax.lax.select(
-                i1, (ell_p == ell).astype(float) * factor * summation[1], result
+                i1, (ell_p == ell).astype(float) * factor * summation, result
             )
             return result
 

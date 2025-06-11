@@ -1,8 +1,8 @@
 import jax.numpy as jnp
-from jax.scipy.special import gammaln
+import jax
 
 def comb(N, k):
-    return jnp.exp(gammaln(N + 1) - gammaln(k + 1) - gammaln(N - k + 1))
+    return jax.lax.fori_loop(0, k, lambda i, acc: acc * (N - i) / (i+1), 1.0)
 
 def effective_spin(q: float, chi1: float, chi2: float) -> tuple[float, float]:
     eta = q / (1.0 + q) ** 2
