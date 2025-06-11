@@ -370,7 +370,8 @@ class NRSur7dq4Model(eqx.Module):
       init_quat: Float[Array, " n_quat"] = jnp.array([1.0, 0.0, 0.0, 0.0]),
       init_orb_phase: float = 0.0,
     ) -> Float[Array, " n_sample"]:
-      return self.get_waveform(time, params, theta, phi, init_quat, init_orb_phase)
+      return self.get_geometric_waveform(params, theta, phi, init_quat,
+                                         init_orb_phase)
 
     def _get_coorb_params(
         self, q: Float, Omega: Float[Array, " n_Omega"]
