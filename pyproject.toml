@@ -28,7 +28,6 @@ cuda = [
     "jax[cuda]>=0.6.0",
 ]
 
-
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
@@ -41,9 +40,16 @@ dev = [
     "ipython>=9.2.0",
     "tensorboard-plugin-profile>=2.19.6",
     "tensorflow>=2.19.0",
+    "notebook>=7.4.3",
 ]
 
 [tool.uv.sources]
 jaxnrsur = { workspace = true }
 
+[tool.pyright]
+include = ["src"]
+exclude = ["test", "docs"]
 
+[tool.ruff]
+include = ["src"]
+exclude = ["test", "docs"]
