@@ -369,8 +369,8 @@ class NRSur7dq4Model(eqx.Module):
       # quaternions
       init_quat: Float[Array, " n_quat"] = jnp.array([1.0, 0.0, 0.0, 0.0]),
       init_orb_phase: float = 0.0,
-    ) -> Float[Array, " n_sample"]:
-      return self.get_geometric_waveform(time,params, theta, phi, init_quat,
+    ) -> tuple[Float[Array, " n_sample"], Float[Array, " n_sample"]]:
+      return self.get_waveform_geometric(time,params, theta, phi, init_quat,
                                          init_orb_phase)
 
     def _get_coorb_params(
@@ -795,7 +795,7 @@ class NRSur7dq4Model(eqx.Module):
         # Get the Wigner D coefficients
         return (self.wigner_d_coefficients(quat, orbphase, mode).T * hlm_plus).T + (self.wigner_d_coefficients(quat, orbphase, (mode[0], -mode[1])).T * hlm_minus).T
 
-    def get_geometric_waveform(
+    def get_waveform_geometric(
         self,
         time: Float[Array, " n_sample"],
         params: Float[Array, " n_dim"],
@@ -804,8 +804,7 @@ class NRSur7dq4Model(eqx.Module):
         # quaternions
         init_quat: Float[Array, " n_quat"] = jnp.array([1.0, 0.0, 0.0, 0.0]),
         init_orb_phase: float = 0.0,
-    ) -> Float[Array, " n_sample"]:
-        #tuple[Float[Array, " n_sample"], Float[Array, " n_sample"]]:
+    ) -> tuple[Float[Array, " n_sample"], Float[Array, " n_sample"]]:
         # TODO set up the appropriate t_low etc
 
         # Initialize Omega with structure:
@@ -935,7 +934,102 @@ class NRSur7dq4Model(eqx.Module):
                 self.harmonics[idx](theta, jnp.pi / 2 - phi) * inertial_h_lms[:, idx]
             )
 
-        # TODO: Add interpolation on time grid
-        result = CubicSpline(self.data.t_coorb, inertial_h)(time)
+        # # window surrogate start with a window that is 0 at the start, as well as zero
+        # # first and second derivative at the start, and is 1 and zero derivatives
+        # # at the end, i.e., x^3(10 + x(6x - 15))
+        # t = self.data.t_coorb - self.data.t_coorb[0]
+        # # TODO: move this setting somewhere else
+        # ALPHA_WINDOW = 0.1
+        # x = t / ALPHA_WINDOW / t[-1]
+        # window = jnp.where(x < 1, x*x*x*(10 + x*(6*x - 15)), 1.0)
+        
+        h_re = CubicSpline(self.data.t_coorb, inertial_h.real)(time)
+        h_im = CubicSpline(self.data.t_coorb, inertial_h.imag)(time)
 
-        return result
+        mask = (time >= self.data.t_coorb[0]) * (time <= self.data.t_coorb[-1])
+        hp = jnp.where(mask, h_re, 0.)
+        hc = jnp.where(mask, -h_im, 0.)
+        
+        return hp, hc
+
+    def get_waveform_td(self,
+                        time: Float[Array, " n_sample"],
+                        params: Float[Array, " n_param"],
+                        alpha_window: float = 0.0,
+                        ) -> tuple[Float[Array, " n_sample"], Float[Array, " n_sample"]]:
+        """
+        Get the waveform in the time domain in SI units.
+        """
+        # get scaling parameters
+        mtot = params[0]
+        dist_mpc = params[1]
+
+        # geometric units to SI
+        GMSUN_SI = 1.32712442099000e+20
+        C_SI = 2.99792458000000e+08
+        RSUN_SI = GMSUN_SI / C_SI**2
+
+        # parsecs to SI
+        PC_SI = 3.08567758149136720000e+16
+        MPC_SI = 1E6*PC_SI
+        
+        # form time array with desired sampling rate and duration
+        # N = int(seglen*srate)
+        # time = jnp.arange(N)/srate - seglen + 2
+        
+        # evaluate the surrogate over the equivalent geometric time
+        time_m = time * C_SI / RSUN_SI / mtot
+        hrM_p, hrM_c = self.get_waveform_geometric(time_m,
+                                                   jnp.array(params[2:]))
+
+        if alpha_window > 0:
+            # create a window for the waveform: the form of the window
+            # is chosen such that it is 0 at the start, as well as zero
+            # first and second derivative at the start, and is 1 and zero
+            # derivatives at the end.
+            Tcoorb = self.data.t_coorb[-1] - self.data.t_coorb[0]
+
+            window_start = jnp.max(jnp.array([time_m[0], self.data.t_coorb[0]]))
+            window_end = window_start + alpha_window*Tcoorb
+
+            x = (time_m - window_start) / (window_end - window_start)
+
+            window = jnp.select([time_m < window_start, time_m > window_end], 
+                                [0.0, 1.0], default=x*x*x*(10 + x*(6*x - 15)))
+            hrM_p *= window
+            hrM_c *= window
+        
+        # this is h * r / M, so scale by the mass and distance
+        const = mtot * RSUN_SI / dist_mpc / MPC_SI
+        return hrM_p * const, hrM_c * const
+
+    def get_waveform_fd(self,
+                        time: Float[Array, " n_sample"],
+                        params: Float[Array, " n_param"],
+                        alpha_window: float = 0.1,
+                        ) -> tuple[Float[Array, " n_freq"],
+                                   Float[Array, " n_freq"]]:
+        """
+        Get the waveform in the frequency domain.
+        """
+        # this could be moved inside get_waveform_td if
+        # we change the API to have seglen and delta_t as
+        # input, rather than time
+        # N = int(seglen/delta_t)
+        # time = jnp.arange(N)*delta_t - seglen + 2
+
+        hp_td, hc_td = self.get_waveform_td(time, params,
+                                            alpha_window=alpha_window)
+
+        h_fd = jnp.fft.fft(hp_td - 1j*hc_td)
+        #f = jnp.fft.fftfreq(N, delta_t)
+
+        # obtain hp_fd and hc_fd
+        # rolling the arrays to get the positive and negative frequency components
+        # aligned correctly, as in np.fft.rfft
+        n = len(h_fd)//2 + 1
+        h_fd_positive = h_fd[:n]
+        conj_h_fd_negative = jnp.conj(jnp.fft.ifftshift(h_fd))[:n][::-1]
+        hp_fd = (h_fd_positive + conj_h_fd_negative)/2
+        hc_fd = 1j*(h_fd_positive - conj_h_fd_negative)/2
+        return hp_fd, hc_fd
