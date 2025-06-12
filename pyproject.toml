@@ -12,6 +12,7 @@ authors = [
 keywords = ["gravitational-wave", "Numerical relativity", "autodiff", "jax"]
 license = {text = "MIT"}
 dependencies = [
+    "beartype>=0.21.0",
     "equinox>=0.12.1",
     "h5py>=3.13.0",
     "jax>=0.6.0",

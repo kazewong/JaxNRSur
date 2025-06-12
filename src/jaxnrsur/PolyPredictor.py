@@ -1,4 +1,5 @@
 import jax.numpy as jnp
+from beartype import beartype as typechecker
 from jaxtyping import Array, Float, Int, jaxtyped
 import equinox as eqx
 
@@ -23,7 +24,7 @@ class PolyPredictor(eqx.Module):
         self.coefs = self.coefs.at[:n_node].set(coefs)
         self.bfOrders = self.bfOrders.at[:n_node].set(bfOrders)
 
-    @jaxtyped
+    @jaxtyped(typechecker=typechecker)
     @staticmethod
     def predict(
         inputs: Float[Array, " n_lambda"],
