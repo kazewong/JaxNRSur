@@ -42,6 +42,7 @@ dev = [
     "tensorboard-plugin-profile>=2.19.6",
     "tensorflow>=2.19.0",
     "notebook>=7.4.3",
+    "pytest>=8.4.0",
 ]
 
 [tool.uv.sources]
