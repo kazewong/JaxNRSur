@@ -30,8 +30,9 @@ class TestNRSur7dq4:
 
     def test_gradient(self):
         def loss(params):
-            return jnp.sum(self.model.get_waveform(jnp.linspace(0, 1, 10), params))
+            return jnp.sum(self.model.get_waveform(jnp.linspace(0, 1, 10), params)).real
             
         params = jnp.array([0.9, 0.0, 0.9, 0.0, 0.1, 0.0, 0.3])
         grad_fn = jax.grad(loss)
         grads = grad_fn(params)
+        print(grads)
