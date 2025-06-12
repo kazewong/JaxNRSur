@@ -1,7 +1,8 @@
 from jaxnrsur.NRSur7dq4 import NRSur7dq4DataLoader, NRSur7dq4Model
 import numpy as np
 import jax.numpy as jnp
-
+import jax
+import pytest
 
 class TestNRSur7dq4:
 
@@ -19,7 +20,7 @@ class TestNRSur7dq4:
 
         params = jnp.concatenate([jnp.array([q]), chi1, chi2])
         h_complex = self.model.get_waveform(jnp.linspace(0, 1, 10), params, theta=incl, phi=phiref)
-        assert (h_complex == self.data).all()
+        assert jnp.allclose(h_complex,self.data['waveform'])
 
     def test_interp_omega_shape(self):
         pass
@@ -28,4 +29,9 @@ class TestNRSur7dq4:
         pass
 
     def test_gradient(self):
-        pass
+        def loss(params):
+            return jnp.sum(self.model.get_waveform(jnp.linspace(0, 1, 10), params))
+            
+        params = jnp.array([0.9, 0.0, 0.9, 0.0, 0.1, 0.0, 0.3])
+        grad_fn = jax.grad(loss)
+        grads = grad_fn(params)
