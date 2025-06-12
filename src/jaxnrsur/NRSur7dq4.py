@@ -433,6 +433,8 @@ class NRSur7dq4Model(eqx.Module):
         coorb_x = self._get_coorb_params(q, Omega_i)
         fit_params = self._get_fit_params(coorb_x)
 
+        # *****WARNING******
+        # evaluate_ensemble_dynamics breaks the gradient
         (
             chiA_0_fit,
             chiA_1_fit,
@@ -881,19 +883,9 @@ class NRSur7dq4Model(eqx.Module):
             self.data.t_coorb,
         ).T
 
-        # TODO: The gradient of the waveform doesn't work yet.
-        # It seems to have problems with lineax
-
-        # Normalizing the quaternions after interpolation
         Omega_interp = Omega_interp.at[:, :4].set(
-            (
-                Omega_interp[:, :4].T
-                / (
-                    jnp.sqrt(jnp.sum(jnp.abs(Omega_interp[:, :4]) ** 2, axis=1))
-                    + 1.0e-12
-                )
-            ).T
-        )
+            (Omega_interp[:, :4].T /(jnp.sqrt(jnp.sum(Omega_interp[:, :4] ** 2, axis=1)))).T)
+
 
         # Get the lambda parameters to go into the waveform calculation
         lambdas = jax.vmap(self._get_fit_params)(
@@ -905,6 +897,8 @@ class NRSur7dq4Model(eqx.Module):
             (len(self.data.t_coorb), self.n_modes_extended), dtype=complex
         )
 
+        # ***********WARNING**********
+        # coorb_hlm breaks the gradient, potentially due to the same reason as above, in the evaluate_ensemble
         # Due to the varying number of nodes, there is no trivial way to vmap this
         coorb_hlm = jnp.array(jax.tree.map(
             lambda idx: self.get_coorb_hlm(lambdas, idx), list(self.modelist_dict.keys()))
