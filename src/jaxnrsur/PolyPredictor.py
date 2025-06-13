@@ -2,6 +2,23 @@ import jax.numpy as jnp
 from beartype import beartype as typechecker
 from jaxtyping import Array, Float, Int, jaxtyped
 import equinox as eqx
+import jax
+from typing import Callable
+
+@jax.custom_jvp
+def stable_power(x: Float[Array, "n"], y: Float[Array, "... n"])-> Float[Array, "... n"]:
+    return jnp.power(x, y)
+    
+@stable_power.defjvp
+def stable_power_jvp(primals, tangents):
+    x, y = primals
+    x_dot, y_dot = tangents
+
+    primal_out = stable_power(x, y)
+    tangent_out = jnp.where((x==0) & (y==0), jnp.zeros(y.shape), y*jnp.power(x,y-1)) * x_dot + jnp.where((x==0) & (y==0), jnp.zeros(x.shape), jnp.log(x)*jnp.power(x,y)) * y_dot
+    
+    return primal_out, tangent_out
+
 
 class PolyPredictor(eqx.Module):
     coefs: Float[Array, " n_sum"]
@@ -30,11 +47,11 @@ class PolyPredictor(eqx.Module):
         inputs: Float[Array, " n_lambda"],
         coefs: Float[Array, " n_sum"],
         bfOrders: Float[Array, " n_sum n_lambda"],
-    ) -> Float[Array, "..."]:
+    ) -> Float[Array, "..."]:        
         return jnp.dot(
             coefs,
             jnp.prod(
-                jnp.power(inputs, bfOrders),
+                stable_power(inputs, bfOrders),
                 axis=1,
             ),
         )

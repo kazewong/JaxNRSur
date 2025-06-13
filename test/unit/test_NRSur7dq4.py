@@ -3,6 +3,26 @@ import numpy as np
 import jax.numpy as jnp
 import jax
 import pytest
+from jaxnrsur.PolyPredictor import stable_power, PolyPredictor
+
+class TestPolyPredictor:
+    def test_gradient(self):
+        coefs = jnp.zeros(1,)
+        bfOrders = jnp.zeros((1, 7))
+        predictor = PolyPredictor(coefs, bfOrders, n_max=1)
+        assert not jnp.isnan(jax.grad(predictor)(jnp.zeros((7,)))).any()
+    
+    def test_stable_power(self):
+        x = jnp.array([0.0, 1.0, 2.0])
+        y = jnp.array([0.0, 1.0, 2.0])
+        result = stable_power(x, y)
+        expected = jnp.array([1.0, 1.0, 4.0])
+        grad_result = jax.grad(stable_power)(x, y)
+        expected_grad = jnp.array([0.0, 1.0, 4.0])
+        assert jnp.allclose(result, expected), "Stable power function did not return expected values."
+        assert jnp.allclose(grad_result, expected_grad), "Gradient of stable power function did not return expected values."
+    
+        
 
 class TestNRSur7dq4:
 
@@ -36,3 +56,4 @@ class TestNRSur7dq4:
         grad_fn = jax.grad(loss)
         grads = grad_fn(params)
         print(grads)
+        
