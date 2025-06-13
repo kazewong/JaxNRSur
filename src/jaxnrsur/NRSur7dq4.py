@@ -1,4 +1,5 @@
 from functools import partial
+from jax.lax import abs_p
 import jax.numpy as jnp
 import jax
 from jax.scipy.special import factorial
@@ -11,6 +12,7 @@ from jaxnrsur.PolyPredictor import (
     evaluate_ensemble,
     evaluate_ensemble_dynamics,
     make_polypredictor_ensemble,
+    stable_power,
 )
 from jaxtyping import Array, Float
 import equinox as eqx
@@ -711,7 +713,7 @@ class NRSur7dq4Model(eqx.Module):
         # The if condition are turned in a lot of vmapped. We should investigate
         # the performance implication
         i1 = (1 - R_A_small) * (1 - R_B_small)
-        i2 = R_A_small
+        i2 = (1 - R_B_small) * R_A_small
         i3 = (1 - R_A_small) * R_B_small
 
         matrix_coefs = jnp.zeros(
@@ -720,29 +722,27 @@ class NRSur7dq4Model(eqx.Module):
 
         # Handling the if statements, additionally using. a Dirac delta to ensure the ells match
         ell_p, m_p = mode
-
+        
         def wigner_d_kernel(ell, m):
             result = jnp.zeros(quat_inv.shape[0], dtype=complex)
+            R_B_prime = jnp.where(
+                R_B_small, jnp.zeros_like(R_B), R_B
+            )
             result = jax.lax.select(
-                i2,
-                (ell_p == ell).astype(float)
-                * (m_p == -m).astype(float)
-                * R_B ** (2 * m)
-                * (-1) ** (ell + m - 1),
+                i2 * (ell_p == ell) * (m_p == -m),
+                R_B_prime ** (2. * m) * -1 ** (ell + m - 1),
                 result,
             )
             result = jax.lax.select(
-                i3,
-                (ell_p == ell).astype(float)
-                * (m_p == m).astype(float)
-                * R_A ** (2 * m),
+                i3 * (ell_p == ell) * (m_p == m),
+                R_A ** (2 * m),
                 result,
             )
             factor = jax.lax.select(
                 i1,
                 jnp.abs(R_A) ** (2 * ell - 2 * m)
                 * R_A ** (m + m_p)
-                * R_B ** (m - m_p)
+                # * R_B ** (m - m_p)
                 * jnp.sqrt(
                     (factorial(ell + m) * (factorial(ell - m)))
                     / (factorial(ell + m_p) * (factorial(ell - m_p)))
@@ -752,12 +752,15 @@ class NRSur7dq4Model(eqx.Module):
             rho = jnp.arange(0, self.max_lm[0] + self.max_lm[1] + 1)
             comb_vmap = jax.vmap(comb, in_axes=(None, 0))
             summation = (((-1) ** rho * comb_vmap(ell + m_p, rho) * comb_vmap(ell - m_p, ell - rho - m)) * abs_R_ratio[:, None] ** (2 * rho)).T
-            conditions = (rho >= jnp.array([0, m_p -m]).max()) * (rho <= jnp.array([ell + m_p, ell - m]).min())
-            summation = conditions[:, None] *summation
+            conditions = (rho >= jnp.array([0, m_p - m]).max()) * (rho <= jnp.array([ell + m_p, ell - m]).min())
+            summation = conditions[:, None] * summation
             summation = jnp.sum(summation, axis=0)
 
-            result = jax.lax.select(
-                i1, (ell_p == ell).astype(float) * factor * summation, result
+            # result = jnp.where(
+            #     i1, (ell_p == ell).astype(float) * factor * summation, result
+            # )
+            result = jnp.where(
+                i1, (ell_p == ell).astype(float) * summation, result
             )
             return result
 
@@ -768,12 +771,14 @@ class NRSur7dq4Model(eqx.Module):
         matrix_coefs = jax.vmap(wigner_d_kernel)(ells, ms).T
 
         # Check the gradient of this (masking out nans)
-        matrix_coefs = jax.lax.select(
+        matrix_coefs = jnp.where(
             jnp.isnan(matrix_coefs),
-            jnp.zeros(matrix_coefs.shape).astype(jnp.complexfloating),
+            jnp.zeros(matrix_coefs.shape),
             matrix_coefs,
         )
-
+        
+        # return jnp.repeat(abs_R_ratio[:, None], len(self.modelist_dict_extended), axis=1)
+        
         return matrix_coefs
 
     def mode_projection(
@@ -783,7 +788,7 @@ class NRSur7dq4Model(eqx.Module):
         quat: Float[Array, " n_quat n_sample"],
         orbphase: Float[Array, " n_sample"],
         mode: tuple[int, int],
-    ):
+    ) -> Float[Array, "n_modes n_sample"]:
         # Get the Wigner D coefficients
         return (self.wigner_d_coefficients(quat, orbphase, mode).T * hlm_plus).T + (self.wigner_d_coefficients(quat, orbphase, (mode[0], -mode[1])).T * hlm_minus).T
 
@@ -894,7 +899,7 @@ class NRSur7dq4Model(eqx.Module):
         coorb_hlm = jnp.array(jax.tree.map(
             lambda idx: self.get_coorb_hlm(lambdas, idx), list(self.modelist_dict.keys()))
         )
-        
+        # **********WARNING**********
         # Gradient works up to here
         
         hlm_projed = eqx.filter_vmap(
@@ -909,7 +914,6 @@ class NRSur7dq4Model(eqx.Module):
         ).T
 
         inertial_h_lms += jnp.sum(hlm_projed, axis=-1).T
-        
 
         # Sum along the N_modes axis with the spherical harmonics to generate strain as function of time
         inertial_h = jnp.zeros(len(self.data.t_coorb), dtype=complex)
