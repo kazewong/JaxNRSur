@@ -725,6 +725,9 @@ class NRSur7dq4Model(eqx.Module):
         
         def wigner_d_kernel(ell, m):
             result = jnp.zeros(quat_inv.shape[0], dtype=complex)
+            R_A_prime = jnp.where(
+                R_A_small, jnp.zeros_like(R_A), R_A
+            )
             R_B_prime = jnp.where(
                 R_B_small, jnp.zeros_like(R_B), R_B
             )
@@ -735,20 +738,28 @@ class NRSur7dq4Model(eqx.Module):
             )
             result = jax.lax.select(
                 i3 * (ell_p == ell) * (m_p == m),
-                R_A ** (2 * m),
+                R_A_prime ** (2 * m),
                 result,
             )
-            factor = jax.lax.select(
-                i1,
-                jnp.abs(R_A) ** (2 * ell - 2 * m)
-                * R_A ** (m + m_p)
-                # * R_B ** (m - m_p)
-                * jnp.sqrt(
-                    (factorial(ell + m) * (factorial(ell - m)))
-                    / (factorial(ell + m_p) * (factorial(ell - m_p)))
-                ),
-                jnp.zeros(R_A.shape).astype(jnp.complexfloating),
+            factorial_num = (factorial(ell + m) * (factorial(ell - m)))
+            factorial_denom = (factorial(ell + m_p) * (factorial(ell - m_p)))
+            factorial_num = jnp.where(factorial_denom == 0, jnp.zeros_like(factorial_num), factorial_num)
+            factorial_denom = jnp.where(factorial_denom == 0, jnp.ones_like(factorial_denom), factorial_denom)
+            factorial_term = jnp.sqrt(factorial_num / factorial_denom)
+            factorial_term = jax.lax.select(
+                jnp.isnan(factorial_term), jnp.zeros_like(factorial_term), factorial_term
             )
+            term1 = jnp.abs(R_A_prime) ** (2 * ell - 2 * m) * R_A_prime ** (m + m_p) * R_B_prime ** (m - m_p)
+            term1 = jnp.where(jnp.isnan(term1), jnp.zeros_like(term1), term1)
+            jax.debug.print("{}", term1)
+            factor = jnp.where(
+                i1,
+                term1 *
+                factorial_term,
+                # factorial_term,
+                jnp.zeros(R_A_prime.shape).astype(jnp.complexfloating),
+            )
+
             rho = jnp.arange(0, self.max_lm[0] + self.max_lm[1] + 1)
             comb_vmap = jax.vmap(comb, in_axes=(None, 0))
             summation = (((-1) ** rho * comb_vmap(ell + m_p, rho) * comb_vmap(ell - m_p, ell - rho - m)) * abs_R_ratio[:, None] ** (2 * rho)).T
@@ -756,11 +767,8 @@ class NRSur7dq4Model(eqx.Module):
             summation = conditions[:, None] * summation
             summation = jnp.sum(summation, axis=0)
 
-            # result = jnp.where(
-            #     i1, (ell_p == ell).astype(float) * factor * summation, result
-            # )
             result = jnp.where(
-                i1, (ell_p == ell).astype(float) * summation, result
+                i1, (ell_p == ell).astype(float) * factor * summation, result
             )
             return result
 
@@ -801,6 +809,7 @@ class NRSur7dq4Model(eqx.Module):
         # quaternions
         init_quat: Float[Array, " n_quat"] = jnp.array([1.0, 0.0, 0.0, 0.0]),
         init_orb_phase: float = 0.0,
+        mode: tuple[int, int] = (2, 2),
     ) -> Float[Array, " n_sample"]:
         #tuple[Float[Array, " n_sample"], Float[Array, " n_sample"]]:
         # TODO set up the appropriate t_low etc
@@ -881,6 +890,8 @@ class NRSur7dq4Model(eqx.Module):
             Omega,
             self.data.t_coorb,
         ).T
+        
+        # return self.wigner_d_coefficients(Omega_interp[:, :4], Omega_interp[:, 4], mode)
 
         Omega_interp = Omega_interp.at[:, :4].set(
             (Omega_interp[:, :4].T /(jnp.sqrt(jnp.sum(Omega_interp[:, :4] ** 2, axis=1)))).T)
@@ -914,7 +925,7 @@ class NRSur7dq4Model(eqx.Module):
         ).T
 
         inertial_h_lms += jnp.sum(hlm_projed, axis=-1).T
-
+        
         # Sum along the N_modes axis with the spherical harmonics to generate strain as function of time
         inertial_h = jnp.zeros(len(self.data.t_coorb), dtype=complex)
         for idx in self.modelist_dict_extended.keys():
