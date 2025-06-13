@@ -432,9 +432,7 @@ class NRSur7dq4Model(eqx.Module):
     ) -> Float[Array, " n_Omega"]:
         coorb_x = self._get_coorb_params(q, Omega_i)
         fit_params = self._get_fit_params(coorb_x)
-
-        # *****WARNING******
-        # evaluate_ensemble_dynamics breaks the gradient
+        
         (
             chiA_0_fit,
             chiA_1_fit,
@@ -469,7 +467,6 @@ class NRSur7dq4Model(eqx.Module):
         dOmega_dt = dOmega_dt.at[3].set(
             0.5 * Omega_i[1] * omega_orb_y - 0.5 * Omega_i[2] * omega_orb_x
         )
-
         # orbital phase derivative
         dOmega_dt = dOmega_dt.at[4].set(omega_fit)
 
@@ -541,9 +538,6 @@ class NRSur7dq4Model(eqx.Module):
         predictors,
         dt: Float,
     ) -> tuple[Float[Array, " n_Omega"], Float[Array, " n_Omega"]]:
-
-        # WARNING: the current way of running the RK4 steps is likely
-        # to be inefficient. Need to adjust it.
 
         predictor_parameters, n_max = eqx.partition(predictors, eqx.is_array)
 
@@ -886,24 +880,23 @@ class NRSur7dq4Model(eqx.Module):
         Omega_interp = Omega_interp.at[:, :4].set(
             (Omega_interp[:, :4].T /(jnp.sqrt(jnp.sum(Omega_interp[:, :4] ** 2, axis=1)))).T)
 
-
         # Get the lambda parameters to go into the waveform calculation
         lambdas = jax.vmap(self._get_fit_params)(
             jax.vmap(self._get_coorb_params, in_axes=(None, 0))(q, Omega_interp)
         )
-
+        
         # TODO need to work out how to vmap this later
         inertial_h_lms = jnp.zeros(
             (len(self.data.t_coorb), self.n_modes_extended), dtype=complex
         )
 
-        # ***********WARNING**********
-        # coorb_hlm breaks the gradient, potentially due to the same reason as above, in the evaluate_ensemble
         # Due to the varying number of nodes, there is no trivial way to vmap this
         coorb_hlm = jnp.array(jax.tree.map(
             lambda idx: self.get_coorb_hlm(lambdas, idx), list(self.modelist_dict.keys()))
         )
-
+        
+        # Gradient works up to here
+        
         hlm_projed = eqx.filter_vmap(
             self.mode_projection,
             in_axes=(0, 0, None, None, 0),
@@ -916,6 +909,7 @@ class NRSur7dq4Model(eqx.Module):
         ).T
 
         inertial_h_lms += jnp.sum(hlm_projed, axis=-1).T
+        
 
         # Sum along the N_modes axis with the spherical harmonics to generate strain as function of time
         inertial_h = jnp.zeros(len(self.data.t_coorb), dtype=complex)
