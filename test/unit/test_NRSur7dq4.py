@@ -58,5 +58,4 @@ class TestNRSur7dq4:
         params = jnp.array([0.9, 0.1, 0.4, 0.1, 0.5, 0.1, 0.3])
         grad_fn = jax.grad(loss)
         grads = grad_fn(params)
-        print(grads)
-        
+        assert ~jnp.isnan(grads).any()
