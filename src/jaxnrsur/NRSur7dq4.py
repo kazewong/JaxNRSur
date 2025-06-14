@@ -749,12 +749,16 @@ class NRSur7dq4Model(eqx.Module):
             factorial_term = jax.lax.select(
                 jnp.isnan(factorial_term), jnp.zeros_like(factorial_term), factorial_term
             )
-            term1 = jnp.abs(R_A_prime) ** (2 * ell - 2 * m) * R_A_prime ** (m + m_p) * R_B_prime ** (m - m_p)
-            term1 = jnp.where(jnp.isnan(term1), jnp.zeros_like(term1), term1)
-            jax.debug.print("{}", term1)
+            term1 = jnp.abs(R_A_prime) ** (2 * ell - 2 * m) * R_A_prime ** (m + m_p)
+            term2 = R_B_prime ** (m - m_p)
+
+            term2 = jnp.where(jnp.isnan(term2), jnp.zeros_like(term2), term2)
+
+            jax.debug.print("term1: {}, term2: {}", term1, term2)
+            jax.debug.print("multiply: {}", term1 * term2)
             factor = jnp.where(
                 i1,
-                term1 *
+                term1 * term2 *
                 factorial_term,
                 # factorial_term,
                 jnp.zeros(R_A_prime.shape).astype(jnp.complexfloating),
@@ -784,8 +788,6 @@ class NRSur7dq4Model(eqx.Module):
             jnp.zeros(matrix_coefs.shape),
             matrix_coefs,
         )
-        
-        # return jnp.repeat(abs_R_ratio[:, None], len(self.modelist_dict_extended), axis=1)
         
         return matrix_coefs
 
@@ -891,8 +893,6 @@ class NRSur7dq4Model(eqx.Module):
             self.data.t_coorb,
         ).T
         
-        # return self.wigner_d_coefficients(Omega_interp[:, :4], Omega_interp[:, 4], mode)
-
         Omega_interp = Omega_interp.at[:, :4].set(
             (Omega_interp[:, :4].T /(jnp.sqrt(jnp.sum(Omega_interp[:, :4] ** 2, axis=1)))).T)
 
@@ -910,8 +910,6 @@ class NRSur7dq4Model(eqx.Module):
         coorb_hlm = jnp.array(jax.tree.map(
             lambda idx: self.get_coorb_hlm(lambdas, idx), list(self.modelist_dict.keys()))
         )
-        # **********WARNING**********
-        # Gradient works up to here
         
         hlm_projed = eqx.filter_vmap(
             self.mode_projection,
