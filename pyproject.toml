@@ -1,6 +1,6 @@
 [project]
 name = "jaxNRSur"
-version = "0.0.1"
+version = "0.1.0"
 description = "Numerical relativity surrogate model for gravitational waveforms in Jax"
 readme = "README.md"
 requires-python = ">=3.11"
