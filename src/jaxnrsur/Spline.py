@@ -20,7 +20,7 @@ class CubicSpline:
         return self.get_value(x)
 
     def get_value(self, x: Float[Array, " n_interp"]) -> Float[Array, " n_interp"]:
-        bin = jnp.digitize(x, self.x_grid)
+        bin = jnp.clip(jnp.digitize(x, self.x_grid), 1, len(self.x_grid) - 1)
         result = (
             self.coeff[bin - 1]
             * (self.x_grid[bin] - x) ** 3
@@ -78,7 +78,8 @@ class CubicSpline:
             Array: coefficients of the cubic spline representation
         """
 
-        diag = jnp.zeros(len(x)) + 2.0
+        diag = jnp.ones(len(x))
+        diag = diag.at[1:-1].set(2.0)
         diff = jnp.diff(x)
         lower_diag = diff[:-1] / (diff[:-1] + diff[1:])
         upper_diag = diff[1:] / (diff[:-1] + diff[1:])
