@@ -688,8 +688,8 @@ class NRSur7dq4Model(eqx.Module):
         quat_rot = jnp.array(
             [
                 jnp.cos(orbphase / 2.0),
-                0.0 * orbphase,
-                0.0 * orbphase,
+                jnp.zeros_like(orbphase),
+                jnp.zeros_like(orbphase),
                 jnp.sin(orbphase / 2.0),
             ]
         ).T
@@ -751,8 +751,8 @@ class NRSur7dq4Model(eqx.Module):
             )
             term1 = jnp.abs(R_A_prime) ** (2 * ell - 2 * m) * R_A_prime ** (m + m_p)
             term2 = R_B_prime ** (m - m_p)
-
-            term2 = jnp.where(jnp.isnan(term2), jnp.zeros_like(term2), term2)
+            term1 = jax.lax.select(~jnp.isfinite(term1), jnp.zeros_like(term1), term1)
+            term2 = jax.lax.select(~jnp.isfinite(term2), jnp.zeros_like(term2), term2)
 
             jax.debug.print("term1: {}, term2: {}", term1, term2)
             jax.debug.print("multiply: {}", term1 * term2)
@@ -760,7 +760,6 @@ class NRSur7dq4Model(eqx.Module):
                 i1,
                 term1 * term2 *
                 factorial_term,
-                # factorial_term,
                 jnp.zeros(R_A_prime.shape).astype(jnp.complexfloating),
             )
 

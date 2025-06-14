@@ -5,6 +5,9 @@ import jax
 import pytest
 from jaxnrsur.PolyPredictor import stable_power, PolyPredictor
 
+# Gradient test will fail if the jax config is not set to use 64-bit precision
+jax.config.update("jax_enable_x64", True)
+
 class TestPolyPredictor:
     def test_gradient(self):
         coefs = jnp.zeros(1,)
@@ -50,9 +53,9 @@ class TestNRSur7dq4:
 
     def test_gradient(self):
         def loss(params):
-            return jnp.sum(self.model.get_waveform(jnp.linspace(0, 1, 10), params)).real
+            return jnp.sum(self.model.get_waveform(jnp.linspace(0, 1, 10), params, theta= 3*jnp.pi/4)).real
             
-        params = jnp.array([0.9, 0.0, 0.9, 0.0, 0.1, 0.0, 0.3])
+        params = jnp.array([0.9, 0.1, 0.4, 0.1, 0.5, 0.1, 0.3])
         grad_fn = jax.grad(loss)
         grads = grad_fn(params)
         print(grads)
