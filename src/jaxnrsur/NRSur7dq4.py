@@ -12,7 +12,6 @@ from jaxnrsur.PolyPredictor import (
     evaluate_ensemble,
     evaluate_ensemble_dynamics,
     make_polypredictor_ensemble,
-    stable_power,
 )
 from jaxtyping import Array, Float
 import equinox as eqx
@@ -755,8 +754,6 @@ class NRSur7dq4Model(eqx.Module):
             term1 = jax.lax.select(~jnp.isfinite(term1), jnp.zeros_like(term1), term1)
             term2 = jax.lax.select(~jnp.isfinite(term2), jnp.zeros_like(term2), term2)
 
-            jax.debug.print("term1: {}, term2: {}", term1, term2)
-            jax.debug.print("multiply: {}", term1 * term2)
             factor = jnp.where(
                 i1,
                 term1 * term2 *
@@ -929,6 +926,8 @@ class NRSur7dq4Model(eqx.Module):
             inertial_h += (
                 self.harmonics[idx](theta, jnp.pi / 2 - phi) * inertial_h_lms[:, idx]
             )
+            
+        return inertial_h, Omega_interp
 
         # # window surrogate start with a window that is 0 at the start, as well as zero
         # # first and second derivative at the start, and is 1 and zero derivatives

@@ -59,3 +59,4 @@ class TestNRSur7dq4:
         grad_fn = jax.grad(loss)
         grads = grad_fn(params)
         assert ~jnp.isnan(grads).any()
+
