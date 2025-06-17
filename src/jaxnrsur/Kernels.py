@@ -1,3 +1,11 @@
+"""
+Kernels module for Gaussian process and related models using JAX and Equinox.
+
+This module defines base and composite kernel classes, as well as specific kernel implementations
+such as constant, white noise, and RBF kernels. Kernels are used to compute covariance matrices
+for Gaussian process models.
+"""
+
 from abc import abstractmethod
 import jax.numpy as jnp
 import equinox as eqx
@@ -5,6 +13,12 @@ from jaxtyping import Array, Float
 
 
 class Kernel(eqx.Module):
+    """
+    Abstract base class for all kernels.
+
+    Methods:
+        __call__(X, Y): Compute the kernel between two sets of samples.
+    """
     def __init__(self):
         super().__init__()
 
@@ -13,11 +27,25 @@ class Kernel(eqx.Module):
         self, X: Float[Array, " n_sample"], Y: Float[Array, " n_sample"]
     ) -> Float[Array, " n_sample"]:
         """
-        We currently support case when both arguments are supplied
+        Compute the kernel between two sets of samples.
+
+        Args:
+            X (Float[Array, " n_sample"]): First set of samples.
+            Y (Float[Array, " n_sample"]): Second set of samples.
+
+        Returns:
+            Float[Array, " n_sample"]: Kernel matrix.
         """
 
 
 class SumKernel(Kernel):
+    """
+    Kernel representing the sum of two kernels.
+
+    Attributes:
+        k1 (Kernel): First kernel.
+        k2 (Kernel): Second kernel.
+    """
     k1: Kernel
     k2: Kernel
 
@@ -29,10 +57,27 @@ class SumKernel(Kernel):
     def __call__(
         self, X: Float[Array, " n_sample"], Y: Float[Array, " n_sample"]
     ) -> Float[Array, " n_sample"]:
+        """
+        Compute the sum of two kernels.
+
+        Args:
+            X (Float[Array, " n_sample"]): First set of samples.
+            Y (Float[Array, " n_sample"]): Second set of samples.
+
+        Returns:
+            Float[Array, " n_sample"]: Kernel matrix.
+        """
         return self.k1(X, Y) + self.k2(X, Y)
 
 
 class ProductKernel(Kernel):
+    """
+    Kernel representing the product of two kernels.
+
+    Attributes:
+        k1 (Kernel): First kernel.
+        k2 (Kernel): Second kernel.
+    """
     k1: Kernel
     k2: Kernel
 
@@ -44,10 +89,28 @@ class ProductKernel(Kernel):
     def __call__(
         self, X: Float[Array, " n_sample"], Y: Float[Array, " n_sample"]
     ) -> Float[Array, " n_sample"]:
+        """
+        Compute the product of two kernels.
+
+        Args:
+            X (Float[Array, " n_sample"]): First set of samples.
+            Y (Float[Array, " n_sample"]): Second set of samples.
+
+        Returns:
+            Float[Array, " n_sample"]: Kernel matrix.
+        """
         return self.k1(X, Y) * self.k2(X, Y)
 
 
 class ConstantKernel(Kernel):
+    """
+    Kernel that returns a constant value for all entries.
+
+    Attributes:
+        constant_value (float): The constant value to return.
+        x_dims (int): Number of rows in the output matrix.
+        y_dims (int): Number of columns in the output matrix.
+    """
     constant_value: float
     x_dims: int
     y_dims: int
@@ -59,6 +122,16 @@ class ConstantKernel(Kernel):
         self.y_dims = y_dims
 
     def load_params(self, params: dict):
+        """
+        Load kernel parameters from a dictionary.
+
+        Args:
+            params (dict): Dictionary containing kernel parameters.
+
+        Raises:
+            ValueError: If the kernel name does not match.
+            KeyError: If no name is provided in params.
+        """
         keys = params.keys()
         if "name" in params:
             if "ConstantKernel" not in params["name"]:
@@ -78,10 +151,28 @@ class ConstantKernel(Kernel):
     def __call__(
         self, X: Float[Array, " n_sample"], Y: Float[Array, " n_sample"]
     ) -> Float[Array, " n_sample"]:
+        """
+        Return a constant matrix of shape (x_dims, y_dims) filled with constant_value.
+
+        Args:
+            X (Float[Array, " n_sample"]): First set of samples (unused).
+            Y (Float[Array, " n_sample"]): Second set of samples (unused).
+
+        Returns:
+            Float[Array, " n_sample"]: Constant matrix.
+        """
         return jnp.full((self.x_dims, self.y_dims), self.constant_value)
 
 
 class WhiteKernel(Kernel):
+    """
+    Kernel that returns a matrix of zeros, representing white noise.
+
+    Attributes:
+        noise_level (float): Noise level (currently unused).
+        x_dims (int): Number of rows in the output matrix.
+        y_dims (int): Number of columns in the output matrix.
+    """
     noise_level: float
     x_dims: int
     y_dims: int
@@ -93,6 +184,16 @@ class WhiteKernel(Kernel):
         self.y_dims = y_dims
 
     def load_params(self, params: dict):
+        """
+        Load kernel parameters from a dictionary.
+
+        Args:
+            params (dict): Dictionary containing kernel parameters.
+
+        Raises:
+            ValueError: If the kernel name does not match.
+            KeyError: If no name is provided in params.
+        """
         keys = params.keys()
         if "name" in params:
             if "WhiteKernel" not in params["name"]:
@@ -112,6 +213,16 @@ class WhiteKernel(Kernel):
     def __call__(
         self, X: Float[Array, " n_sample"], Y: Float[Array, " n_sample"]
     ) -> Float[Array, " n_sample"]:
+        """
+        Return a matrix of zeros of shape (x_dims, y_dims).
+
+        Args:
+            X (Float[Array, " n_sample"]): First set of samples (unused).
+            Y (Float[Array, " n_sample"]): Second set of samples (unused).
+
+        Returns:
+            Float[Array, " n_sample"]: Zero matrix.
+        """
         return jnp.zeros((self.x_dims, self.y_dims))
 
 
@@ -119,23 +230,48 @@ def cdist(
     X: Float[Array, " n_sample"], Y: Float[Array, " n_sample"]
 ) -> Float[Array, " n_sample"]:
     """
-    Compute square distance between two metric
+    Compute squared Euclidean distance between two sets of samples.
+
+    Args:
+        X (Float[Array, " n_sample"]): First set of samples.
+        Y (Float[Array, " n_sample"]): Second set of samples.
+
+    Returns:
+        Float[Array, " n_sample"]: Matrix of squared distances.
     """
     return jnp.sum((X[:, None] - Y[None, :]) ** 2, axis=-1)
 
 
 class RBF(Kernel):
+    """
+    Radial Basis Function (RBF) kernel (a.k.a. Gaussian kernel).
+
+    Attributes:
+        length_scale (float): Length scale parameter for the kernel.
+    """
     length_scale: float
 
-    """
-    Anisotropic RBF kernel
-    """
-
     def __init__(self, length_scale: float = 1.0):
+        """
+        Initialize the RBF kernel.
+
+        Args:
+            length_scale (float): Length scale parameter.
+        """
         super().__init__()
         self.length_scale = length_scale
 
     def load_params(self, params: dict):
+        """
+        Load kernel parameters from a dictionary.
+
+        Args:
+            params (dict): Dictionary containing kernel parameters.
+
+        Raises:
+            ValueError: If the kernel name does not match.
+            KeyError: If no name is provided in params.
+        """
         keys = params.keys()
         if "name" in params:
             if "RBF" not in params["name"]:
@@ -149,5 +285,15 @@ class RBF(Kernel):
     def __call__(
         self, X: Float[Array, " n_sample"], Y: Float[Array, " n_sample"]
     ) -> Float[Array, " n_sample"]:
+        """
+        Compute the RBF kernel between two sets of samples.
+
+        Args:
+            X (Float[Array, " n_sample"]): First set of samples.
+            Y (Float[Array, " n_sample"]): Second set of samples.
+
+        Returns:
+            Float[Array, " n_sample"]: Kernel matrix.
+        """
         dists = cdist((X / self.length_scale), (Y / self.length_scale))
         return jnp.exp(-0.5 * dists)
