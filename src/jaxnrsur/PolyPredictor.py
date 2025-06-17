@@ -7,7 +7,7 @@ import jax
 
 @jax.custom_jvp
 def stable_power(
-    x: Float[Array, "n"], y: Float[Array, "... n"]
+    x: Float[Array, " n"], y: Float[Array, "... n"]
 ) -> Float[Array, "... n"]:
     return jnp.power(x, y)
 

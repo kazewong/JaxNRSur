@@ -802,7 +802,6 @@ dependencies = [
 benchmark = [
     { name = "gwsurrogate", version = "1.1.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.13'" },
     { name = "gwsurrogate", version = "1.1.7", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.13'" },
-    { name = "pytest" },
     { name = "tensorboard" },
 ]
 cuda = [
@@ -816,6 +815,7 @@ dev = [
     { name = "jaxnrsur" },
     { name = "matplotlib" },
     { name = "notebook" },
+    { name = "pytest" },
 ]
 
 [package.metadata]
@@ -827,7 +827,6 @@ requires-dist = [
     { name = "jax", specifier = ">=0.6.0" },
     { name = "jax", extras = ["cuda"], marker = "extra == 'cuda'", specifier = ">=0.6.0" },
     { name = "lineax", specifier = ">=0.0.8" },
-    { name = "pytest", marker = "extra == 'benchmark'", specifier = ">=8.4.0" },
     { name = "requests", specifier = ">=2.32.3" },
     { name = "tensorboard", marker = "extra == 'benchmark'", specifier = ">=2.19.0" },
 ]
@@ -840,6 +839,7 @@ dev = [
     { name = "jaxnrsur", editable = "." },
     { name = "matplotlib", specifier = ">=3.10.3" },
     { name = "notebook", specifier = ">=7.4.3" },
+    { name = "pytest", specifier = ">=8.4.0" },
 ]
 
 [[package]]
