@@ -62,7 +62,9 @@ class CubicSpline:
 
     @staticmethod
     @jax.jit
-    def build_rep(x: Float[Array, " n_grid"], y: Float[Array, " n_grid"]) -> Float[Array, " n_grid"]:
+    def build_rep(
+        x: Float[Array, " n_grid"], y: Float[Array, " n_grid"]
+    ) -> Float[Array, " n_grid"]:
         # TODO: Revise boundary condition
 
         """

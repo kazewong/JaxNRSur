@@ -1,8 +1,10 @@
 import jax.numpy as jnp
 import jax
 
+
 def comb(N, k):
-    return jax.lax.fori_loop(0, k, lambda i, acc: acc * (N - i) / (i+1), 1.0)
+    return jax.lax.fori_loop(0, k, lambda i, acc: acc * (N - i) / (i + 1), 1.0)
+
 
 def effective_spin(q: float, chi1: float, chi2: float) -> tuple[float, float]:
     eta = q / (1.0 + q) ** 2

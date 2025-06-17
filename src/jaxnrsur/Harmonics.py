@@ -65,12 +65,7 @@ class SpinWeightedSphericalHarmonics(eqx.Module):
     m_mode: int
     mm_mode: int
 
-    def __init__(
-        self,
-        s_mode: int,
-        l_mode: int,
-        m_mode: int
-    ) -> None:
+    def __init__(self, s_mode: int, l_mode: int, m_mode: int) -> None:
         Pm = 1.0
 
         l = l_mode
@@ -101,7 +96,5 @@ class SpinWeightedSphericalHarmonics(eqx.Module):
         self.mm_mode = m_mode
 
     def __call__(self, theta: float, phi: float) -> Float[Array, " 1"]:
-        result = s_lambda_lm(
-            self.s_mode, self.l_mode, self.m_mode, jnp.cos(theta)
-        )
+        result = s_lambda_lm(self.s_mode, self.l_mode, self.m_mode, jnp.cos(theta))
         return self.Pm_coeff * result * jnp.exp(1j * self.mm_mode * phi)

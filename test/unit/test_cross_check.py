@@ -49,9 +49,9 @@ def test_waveform_agreement(test_data, jax_model):
 
     for i in range(len(params)):
         # Select parameters for this sample
-        
+
         sample_params = params[i]
-        
+
         inertial_h, Omega_interp = jax_model.get_waveform_geometric(
             t_ref[i],
             sample_params,
@@ -59,6 +59,11 @@ def test_waveform_agreement(test_data, jax_model):
             phi=phi_ref[i],
         )
 
-        interp_ans = interp1d(t_ref[i], h_ref[i], bounds_error=False, fill_value=0, kind="cubic")(jax_model.data.t_coorb)
+        interp_ans = interp1d(
+            t_ref[i], h_ref[i], bounds_error=False, fill_value=0, kind="cubic"
+        )(jax_model.data.t_coorb)
 
-        print(f"Sample {i}: Max abs difference in hp:", np.max(np.abs(interp_ans - inertial_h)))
+        print(
+            f"Sample {i}: Max abs difference in hp:",
+            np.max(np.abs(interp_ans - inertial_h)),
+        )

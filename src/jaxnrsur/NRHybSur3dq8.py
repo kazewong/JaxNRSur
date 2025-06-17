@@ -16,6 +16,7 @@ def get_T3_phase(q: float, t: Float[Array, " n"], t_ref: float = 1000.0) -> floa
     theta_cal = (eta * (t_ref + 1000) / 5) ** (-1.0 / 8)
     return 2.0 / (eta * theta_raw**5) - 2.0 / (eta * theta_cal**5)
 
+
 class NRHybSur3dq8DataLoader(eqx.Module):
     sur_time: Float[Array, " n_sample"]
     modes: list[dict]
@@ -36,8 +37,10 @@ class NRHybSur3dq8DataLoader(eqx.Module):
             (5, 5),
         ],
     ) -> None:
-
-        data = load_data("https://zenodo.org/records/3348115/files/NRHybSur3dq8.h5?download=1", "NRHybSur3dq8.h5")
+        data = load_data(
+            "https://zenodo.org/records/3348115/files/NRHybSur3dq8.h5?download=1",
+            "NRHybSur3dq8.h5",
+        )
         self.sur_time = jnp.array(data["domain"])
 
         self.modes = []
@@ -61,9 +64,9 @@ class NRHybSur3dq8DataLoader(eqx.Module):
                     except ValueError:
                         raise ValueError("GPR Fit info doesn't exist")
 
-                    assert isinstance(
-                        fit_data, h5py.Group
-                    ), "GPR Fit info is not a group"
+                    assert isinstance(fit_data, h5py.Group), (
+                        "GPR Fit info is not a group"
+                    )
                     res = h5Group_to_dict(fit_data)
                     node_predictor = EIMpredictor(res)
                     predictors.append(node_predictor)
@@ -111,7 +114,6 @@ class NRHybSur3dq8DataLoader(eqx.Module):
                     )
         result["mode"] = mode
         return result
-
 
 
 class NRHybSur3dq8Model(eqx.Module):

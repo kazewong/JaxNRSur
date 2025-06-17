@@ -5,18 +5,29 @@ import equinox as eqx
 import jax
 from typing import Callable
 
+
 @jax.custom_jvp
-def stable_power(x: Float[Array, "n"], y: Float[Array, "... n"])-> Float[Array, "... n"]:
+def stable_power(
+    x: Float[Array, "n"], y: Float[Array, "... n"]
+) -> Float[Array, "... n"]:
     return jnp.power(x, y)
-    
+
+
 @stable_power.defjvp
 def stable_power_jvp(primals, tangents):
     x, y = primals
     x_dot, y_dot = tangents
 
     primal_out = stable_power(x, y)
-    tangent_out = jnp.where((x==0) & (y==0), jnp.zeros(y.shape), y*jnp.power(x,y-1)) * x_dot + jnp.where((x==0) & (y==0), jnp.zeros(x.shape), jnp.log(x)*jnp.power(x,y)) * y_dot
-    
+    tangent_out = (
+        jnp.where((x == 0) & (y == 0), jnp.zeros(y.shape), y * jnp.power(x, y - 1))
+        * x_dot
+        + jnp.where(
+            (x == 0) & (y == 0), jnp.zeros(x.shape), jnp.log(x) * jnp.power(x, y)
+        )
+        * y_dot
+    )
+
     return primal_out, tangent_out
 
 
@@ -58,13 +69,16 @@ class PolyPredictor(eqx.Module):
 
     def __call__(self, X: Float[Array, " n_lambda "]) -> Float[Array, " 1"]:
         return self.predict(X, self.coefs, self.bfOrders)
-    
-    def predict_at_index(self, X: Float[Array, " n_lambda "], idx: Int) -> Float[Array, " 1"]:
+
+    def predict_at_index(
+        self, X: Float[Array, " n_lambda "], idx: Int
+    ) -> Float[Array, " 1"]:
         return self.predict(X, self.coefs[idx], self.bfOrders[idx])
 
     @property
     def n_nodes(self) -> int:
         return self.coefs.shape[0]
+
 
 @eqx.filter_vmap(in_axes=(eqx.if_array(0), None))
 def evaluate_ensemble_dynamics(
@@ -72,11 +86,13 @@ def evaluate_ensemble_dynamics(
 ) -> Float[Array, " n_predictor"]:
     return predictors(inputs)
 
+
 @eqx.filter_vmap(in_axes=(eqx.if_array(0), eqx.if_array(0)))
 def evaluate_ensemble(
     predictors: PolyPredictor, inputs: Float[Array, " n_lambda"]
 ) -> Float[Array, " n_predictor"]:
     return predictors(inputs)
+
 
 @eqx.filter_vmap(in_axes=(0, 0, None))
 def make_polypredictor_ensemble(

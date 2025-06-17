@@ -39,18 +39,19 @@ def download_from_zenodo(url: str, local_filename: str) -> bool:
         print(f"Failed to download the file. Status code: {response.status_code}")
         return False
 
+
 def load_data(url: str, local_filename: str) -> h5py.File:
     home_directory = os.environ["HOME"]
-    os.makedirs(home_directory+"/.jaxNRSur", exist_ok=True)
+    os.makedirs(home_directory + "/.jaxNRSur", exist_ok=True)
     try:
         print("Try loading file from cache")
-        data = h5py.File(home_directory + "/.jaxNRSur/"+ local_filename, "r")
+        data = h5py.File(home_directory + "/.jaxNRSur/" + local_filename, "r")
         print("Cache found and loading data")
     except FileNotFoundError:
         print("Cache not found, downloading from Zenodo")
         downloaded = download_from_zenodo(
             url,
-            home_directory + "/.jaxNRSur/"+local_filename,
+            home_directory + "/.jaxNRSur/" + local_filename,
         )
         if downloaded:
             print("Download successful, loading data")
@@ -58,6 +59,7 @@ def load_data(url: str, local_filename: str) -> h5py.File:
         else:
             raise KeyError("Cannot download data from zenodo")
     return data
+
 
 def h5Group_to_dict(h5_group: h5py.Group) -> dict:
     result = {}

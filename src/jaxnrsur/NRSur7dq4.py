@@ -16,6 +16,7 @@ from jaxnrsur.PolyPredictor import (
 from jaxtyping import Array, Float
 import equinox as eqx
 
+
 class NRSur7dq4ModeFunction(eqx.Module):
     predictors: PolyPredictor
     eim_basis: Float[Array, " n_nodes n_sample"]
@@ -41,6 +42,7 @@ class NRSur7dq4ModeFunction(eqx.Module):
         self.predictors = predictors
         self.eim_basis = eim_basis
         self.node_indices = node_indices
+
 
 class NRSur7dq4Mode:
     real_plus: NRSur7dq4ModeFunction
@@ -222,7 +224,9 @@ class NRSur7dq4DataLoader(eqx.Module):
             node_indices=node_indices,
         )
 
-    def read_single_mode(self, file: dict, mode: tuple[int, int], n_max: int) -> NRSur7dq4Mode:
+    def read_single_mode(
+        self, file: dict, mode: tuple[int, int], n_max: int
+    ) -> NRSur7dq4Mode:
         if mode[1] > 0:
             real_plus = self.read_mode_function(
                 file[f"hCoorb_{mode[0]}_{mode[1]}_Re+"], n_max
@@ -320,7 +324,7 @@ class NRSur7dq4Model(eqx.Module):
     harmonics: list[SpinWeightedSphericalHarmonics]
     n_modes: int
     n_modes_extended: int
-    max_lm: tuple[int,int]
+    max_lm: tuple[int, int]
 
     def __init__(
         self,
@@ -362,20 +366,25 @@ class NRSur7dq4Model(eqx.Module):
 
         for mode in list(self.modelist_dict_extended.values()):
             self.harmonics.append(SpinWeightedSphericalHarmonics(-2, mode[0], mode[1]))
-            
-        self.max_lm = (max([mode[0] for mode in modelist]), max([abs(mode[1]) for mode in modelist]))
 
-    def __call__(self,
-      time: Float[Array, " n_sample"],
-      params: Float[Array, " n_dim"],
-      theta: float = 0.0,
-      phi: float = 0.0,
-      # quaternions
-      init_quat: Float[Array, " n_quat"] = jnp.array([1.0, 0.0, 0.0, 0.0]),
-      init_orb_phase: float = 0.0,
+        self.max_lm = (
+            max([mode[0] for mode in modelist]),
+            max([abs(mode[1]) for mode in modelist]),
+        )
+
+    def __call__(
+        self,
+        time: Float[Array, " n_sample"],
+        params: Float[Array, " n_dim"],
+        theta: float = 0.0,
+        phi: float = 0.0,
+        # quaternions
+        init_quat: Float[Array, " n_quat"] = jnp.array([1.0, 0.0, 0.0, 0.0]),
+        init_orb_phase: float = 0.0,
     ) -> tuple[Float[Array, " n_sample"], Float[Array, " n_sample"]]:
-      return self.get_waveform_geometric(time,params, theta, phi, init_quat,
-                                         init_orb_phase)
+        return self.get_waveform_geometric(
+            time, params, theta, phi, init_quat, init_orb_phase
+        )
 
     def _get_coorb_params(
         self, q: Float, Omega: Float[Array, " n_Omega"]
@@ -434,7 +443,7 @@ class NRSur7dq4Model(eqx.Module):
     ) -> Float[Array, " n_Omega"]:
         coorb_x = self._get_coorb_params(q, Omega_i)
         fit_params = self._get_fit_params(coorb_x)
-        
+
         (
             chiA_0_fit,
             chiA_1_fit,
@@ -491,7 +500,6 @@ class NRSur7dq4Model(eqx.Module):
         predictor,
         dt: Float[Array, " 4"],
     ) -> tuple[Float[Array, " n_Omega"], Float[Array, " n_Omega"]]:
-
         dOmega_dt = self.get_Omega_derivative(Omega_i4[-1], q, predictor)
 
         # Using the timestep variable AB4 from gwsurrogate
@@ -540,14 +548,12 @@ class NRSur7dq4Model(eqx.Module):
         predictors,
         dt: Float,
     ) -> tuple[Float[Array, " n_Omega"], Float[Array, " n_Omega"]]:
-
         predictor_parameters, n_max = eqx.partition(predictors, eqx.is_array)
 
         def get_RK4_Omega_derivatives(
             carry: tuple[Float[Array, " n_Omega"], Float, Float[Array, " n_Omega"]],
             data: tuple[PolyPredictor, Float[Array, " 4"]],
         ):
-
             Omega, q, derivative = carry
             predictor_parameters, dt = data
 
@@ -600,11 +606,9 @@ class NRSur7dq4Model(eqx.Module):
         predictor: PolyPredictor,
         eim_basis: Float[Array, " n_nodes n_sample"],
     ) -> Float[Array, " n_sample"]:
-
         return jnp.dot(evaluate_ensemble(predictor, lambdas), eim_basis)
 
     def get_coorb_hlm(self, lambdas, idx: int):
-
         # surrogate is built on the symmetric (sum) and antisymmetric (diff)
         # combinations of the +|m| and -|m| modes
         # (although they are confusingly labeled "plus" and "minus" in
@@ -683,7 +687,6 @@ class NRSur7dq4Model(eqx.Module):
         orbphase: Float[Array, " n_sample"],
         mode: tuple,
     ) -> Float[Array, " n_modes n_sample"]:
-
         # First rotate the quaternion as well
         quat_rot = jnp.array(
             [
@@ -722,18 +725,14 @@ class NRSur7dq4Model(eqx.Module):
 
         # Handling the if statements, additionally using. a Dirac delta to ensure the ells match
         ell_p, m_p = mode
-        
+
         def wigner_d_kernel(ell, m):
             result = jnp.zeros(quat_inv.shape[0], dtype=complex)
-            R_A_prime = jnp.where(
-                R_A_small, jnp.zeros_like(R_A), R_A
-            )
-            R_B_prime = jnp.where(
-                R_B_small, jnp.zeros_like(R_B), R_B
-            )
+            R_A_prime = jnp.where(R_A_small, jnp.zeros_like(R_A), R_A)
+            R_B_prime = jnp.where(R_B_small, jnp.zeros_like(R_B), R_B)
             result = jax.lax.select(
                 i2 * (ell_p == ell) * (m_p == -m),
-                R_B_prime ** (2. * m) * -1 ** (ell + m - 1),
+                R_B_prime ** (2.0 * m) * -(1 ** (ell + m - 1)),
                 result,
             )
             result = jax.lax.select(
@@ -741,13 +740,19 @@ class NRSur7dq4Model(eqx.Module):
                 R_A_prime ** (2 * m),
                 result,
             )
-            factorial_num = (factorial(ell + m) * (factorial(ell - m)))
-            factorial_denom = (factorial(ell + m_p) * (factorial(ell - m_p)))
-            factorial_num = jnp.where(factorial_denom == 0, jnp.zeros_like(factorial_num), factorial_num)
-            factorial_denom = jnp.where(factorial_denom == 0, jnp.ones_like(factorial_denom), factorial_denom)
+            factorial_num = factorial(ell + m) * (factorial(ell - m))
+            factorial_denom = factorial(ell + m_p) * (factorial(ell - m_p))
+            factorial_num = jnp.where(
+                factorial_denom == 0, jnp.zeros_like(factorial_num), factorial_num
+            )
+            factorial_denom = jnp.where(
+                factorial_denom == 0, jnp.ones_like(factorial_denom), factorial_denom
+            )
             factorial_term = jnp.sqrt(factorial_num / factorial_denom)
             factorial_term = jax.lax.select(
-                jnp.isnan(factorial_term), jnp.zeros_like(factorial_term), factorial_term
+                jnp.isnan(factorial_term),
+                jnp.zeros_like(factorial_term),
+                factorial_term,
             )
             term1 = jnp.abs(R_A_prime) ** (2 * ell - 2 * m) * R_A_prime ** (m + m_p)
             term2 = R_B_prime ** (m - m_p)
@@ -756,15 +761,23 @@ class NRSur7dq4Model(eqx.Module):
 
             factor = jnp.where(
                 i1,
-                term1 * term2 *
-                factorial_term,
+                term1 * term2 * factorial_term,
                 jnp.zeros(R_A_prime.shape).astype(jnp.complexfloating),
             )
 
             rho = jnp.arange(0, self.max_lm[0] + self.max_lm[1] + 1)
             comb_vmap = jax.vmap(comb, in_axes=(None, 0))
-            summation = (((-1) ** rho * comb_vmap(ell + m_p, rho) * comb_vmap(ell - m_p, ell - rho - m)) * abs_R_ratio[:, None] ** (2 * rho)).T
-            conditions = (rho >= jnp.array([0, m_p - m]).max()) * (rho <= jnp.array([ell + m_p, ell - m]).min())
+            summation = (
+                (
+                    (-1) ** rho
+                    * comb_vmap(ell + m_p, rho)
+                    * comb_vmap(ell - m_p, ell - rho - m)
+                )
+                * abs_R_ratio[:, None] ** (2 * rho)
+            ).T
+            conditions = (rho >= jnp.array([0, m_p - m]).max()) * (
+                rho <= jnp.array([ell + m_p, ell - m]).min()
+            )
             summation = conditions[:, None] * summation
             summation = jnp.sum(summation, axis=0)
 
@@ -785,7 +798,7 @@ class NRSur7dq4Model(eqx.Module):
             jnp.zeros(matrix_coefs.shape),
             matrix_coefs,
         )
-        
+
         return matrix_coefs
 
     def mode_projection(
@@ -797,7 +810,10 @@ class NRSur7dq4Model(eqx.Module):
         mode: tuple[int, int],
     ) -> Float[Array, "n_modes n_sample"]:
         # Get the Wigner D coefficients
-        return (self.wigner_d_coefficients(quat, orbphase, mode).T * hlm_plus).T + (self.wigner_d_coefficients(quat, orbphase, (mode[0], -mode[1])).T * hlm_minus).T
+        return (self.wigner_d_coefficients(quat, orbphase, mode).T * hlm_plus).T + (
+            self.wigner_d_coefficients(quat, orbphase, (mode[0], -mode[1])).T
+            * hlm_minus
+        ).T
 
     def get_waveform_inertial(
         self,
@@ -887,25 +903,32 @@ class NRSur7dq4Model(eqx.Module):
             Omega,
             self.data.t_coorb,
         ).T
-        
+
         Omega_interp = Omega_interp.at[:, :4].set(
-            (Omega_interp[:, :4].T /(jnp.sqrt(jnp.sum(Omega_interp[:, :4] ** 2, axis=1)))).T)
+            (
+                Omega_interp[:, :4].T
+                / (jnp.sqrt(jnp.sum(Omega_interp[:, :4] ** 2, axis=1)))
+            ).T
+        )
 
         # Get the lambda parameters to go into the waveform calculation
         lambdas = jax.vmap(self._get_fit_params)(
             jax.vmap(self._get_coorb_params, in_axes=(None, 0))(q, Omega_interp)
         )
-        
+
         # TODO need to work out how to vmap this later
         inertial_h_lms = jnp.zeros(
             (len(self.data.t_coorb), self.n_modes_extended), dtype=complex
         )
 
         # Due to the varying number of nodes, there is no trivial way to vmap this
-        coorb_hlm = jnp.array(jax.tree.map(
-            lambda idx: self.get_coorb_hlm(lambdas, idx), list(self.modelist_dict.keys()))
+        coorb_hlm = jnp.array(
+            jax.tree.map(
+                lambda idx: self.get_coorb_hlm(lambdas, idx),
+                list(self.modelist_dict.keys()),
+            )
         )
-        
+
         hlm_projed = eqx.filter_vmap(
             self.mode_projection,
             in_axes=(0, 0, None, None, 0),
@@ -918,7 +941,7 @@ class NRSur7dq4Model(eqx.Module):
         ).T
 
         inertial_h_lms += jnp.sum(hlm_projed, axis=-1).T
-        
+
         # Sum along the N_modes axis with the spherical harmonics to generate strain as function of time
         inertial_h = jnp.zeros(len(self.data.t_coorb), dtype=complex)
         for idx in self.modelist_dict_extended.keys():
@@ -926,11 +949,9 @@ class NRSur7dq4Model(eqx.Module):
             inertial_h += (
                 self.harmonics[idx](theta, jnp.pi / 2 - phi) * inertial_h_lms[:, idx]
             )
-            
+
         return inertial_h, Omega_interp
 
-
-        
     def get_waveform_geometric(
         self,
         time: Float[Array, " n_sample"],
@@ -940,46 +961,46 @@ class NRSur7dq4Model(eqx.Module):
         # quaternions
         init_quat: Float[Array, " n_quat"] = jnp.array([1.0, 0.0, 0.0, 0.0]),
         init_orb_phase: float = 0.0,
-        ) -> tuple[Float[Array, " n_sample"], Float[Array, " n_sample"]]:
-            """
-            Get the waveform in geometric units (h*r/M).
-            """
-            # Get the inertial frame waveform and Omega_interp
-            h, Omega_interp = self.get_waveform_inertial(
-                time,
-                params,
-                theta=theta,
-                phi=phi,
-                init_quat=init_quat,
-                init_orb_phase=init_orb_phase,
-            )
+    ) -> tuple[Float[Array, " n_sample"], Float[Array, " n_sample"]]:
+        """
+        Get the waveform in geometric units (h*r/M).
+        """
+        # Get the inertial frame waveform and Omega_interp
+        h, Omega_interp = self.get_waveform_inertial(
+            time,
+            params,
+            theta=theta,
+            phi=phi,
+            init_quat=init_quat,
+            init_orb_phase=init_orb_phase,
+        )
 
-            # # window surrogate start with a window that is 0 at the start, as well as zero
-            # # first and second derivative at the start, and is 1 and zero derivatives
-            # # at the end, i.e., x^3(10 + x(6x - 15))
-            # t = self.data.t_coorb - self.data.t_coorb[0]
-            # # TODO: move this setting somewhere else
-            # ALPHA_WINDOW = 0.1
-            # x = t / ALPHA_WINDOW / t[-1]
-            # window = jnp.where(x < 1, x*x*x*(10 + x*(6*x - 15)), 1.0)
+        # # window surrogate start with a window that is 0 at the start, as well as zero
+        # # first and second derivative at the start, and is 1 and zero derivatives
+        # # at the end, i.e., x^3(10 + x(6x - 15))
+        # t = self.data.t_coorb - self.data.t_coorb[0]
+        # # TODO: move this setting somewhere else
+        # ALPHA_WINDOW = 0.1
+        # x = t / ALPHA_WINDOW / t[-1]
+        # window = jnp.where(x < 1, x*x*x*(10 + x*(6*x - 15)), 1.0)
 
+        # Interpolate real and imaginary parts to the requested time array
+        h_re = CubicSpline(self.data.t_coorb, h.real)(time)
+        h_im = CubicSpline(self.data.t_coorb, h.imag)(time)
 
-            # Interpolate real and imaginary parts to the requested time array
-            h_re = CubicSpline(self.data.t_coorb, h.real)(time)
-            h_im = CubicSpline(self.data.t_coorb, h.imag)(time)
+        # Mask to ensure output is zero outside the model's time range
+        mask = (time >= self.data.t_coorb[0]) * (time <= self.data.t_coorb[-1])
+        hp = jnp.where(mask, h_re, 0.0)
+        hc = jnp.where(mask, -h_im, 0.0)
 
-            # Mask to ensure output is zero outside the model's time range
-            mask = (time >= self.data.t_coorb[0]) * (time <= self.data.t_coorb[-1])
-            hp = jnp.where(mask, h_re, 0.)
-            hc = jnp.where(mask, -h_im, 0.)
+        return hp, hc
 
-            return hp, hc
-
-    def get_waveform_td(self,
-                        time: Float[Array, " n_sample"],
-                        params: Float[Array, " n_param"],
-                        alpha_window: float = 0.0,
-                        ) -> tuple[Float[Array, " n_sample"], Float[Array, " n_sample"]]:
+    def get_waveform_td(
+        self,
+        time: Float[Array, " n_sample"],
+        params: Float[Array, " n_param"],
+        alpha_window: float = 0.0,
+    ) -> tuple[Float[Array, " n_sample"], Float[Array, " n_sample"]]:
         """
         Get the waveform in the time domain in SI units.
         """
@@ -988,22 +1009,21 @@ class NRSur7dq4Model(eqx.Module):
         dist_mpc = params[1]
 
         # geometric units to SI
-        GMSUN_SI = 1.32712442099000e+20
-        C_SI = 2.99792458000000e+08
+        GMSUN_SI = 1.32712442099000e20
+        C_SI = 2.99792458000000e08
         RSUN_SI = GMSUN_SI / C_SI**2
 
         # parsecs to SI
-        PC_SI = 3.08567758149136720000e+16
-        MPC_SI = 1E6*PC_SI
-        
+        PC_SI = 3.08567758149136720000e16
+        MPC_SI = 1e6 * PC_SI
+
         # form time array with desired sampling rate and duration
         # N = int(seglen*srate)
         # time = jnp.arange(N)/srate - seglen + 2
-        
+
         # evaluate the surrogate over the equivalent geometric time
         time_m = time * C_SI / RSUN_SI / mtot
-        hrM_p, hrM_c = self.get_waveform_geometric(time_m,
-                                                   jnp.array(params[2:]))
+        hrM_p, hrM_c = self.get_waveform_geometric(time_m, jnp.array(params[2:]))
 
         if alpha_window > 0:
             # create a window for the waveform: the form of the window
@@ -1013,25 +1033,28 @@ class NRSur7dq4Model(eqx.Module):
             Tcoorb = self.data.t_coorb[-1] - self.data.t_coorb[0]
 
             window_start = jnp.max(jnp.array([time_m[0], self.data.t_coorb[0]]))
-            window_end = window_start + alpha_window*Tcoorb
+            window_end = window_start + alpha_window * Tcoorb
 
             x = (time_m - window_start) / (window_end - window_start)
 
-            window = jnp.select([time_m < window_start, time_m > window_end], 
-                                [0.0, 1.0], default=x*x*x*(10 + x*(6*x - 15)))
+            window = jnp.select(
+                [time_m < window_start, time_m > window_end],
+                [0.0, 1.0],
+                default=x * x * x * (10 + x * (6 * x - 15)),
+            )
             hrM_p *= window
             hrM_c *= window
-        
+
         # this is h * r / M, so scale by the mass and distance
         const = mtot * RSUN_SI / dist_mpc / MPC_SI
         return hrM_p * const, hrM_c * const
 
-    def get_waveform_fd(self,
-                        time: Float[Array, " n_sample"],
-                        params: Float[Array, " n_param"],
-                        alpha_window: float = 0.1,
-                        ) -> tuple[Float[Array, " n_freq"],
-                                   Float[Array, " n_freq"]]:
+    def get_waveform_fd(
+        self,
+        time: Float[Array, " n_sample"],
+        params: Float[Array, " n_param"],
+        alpha_window: float = 0.1,
+    ) -> tuple[Float[Array, " n_freq"], Float[Array, " n_freq"]]:
         """
         Get the waveform in the frequency domain.
         """
@@ -1041,18 +1064,17 @@ class NRSur7dq4Model(eqx.Module):
         # N = int(seglen/delta_t)
         # time = jnp.arange(N)*delta_t - seglen + 2
 
-        hp_td, hc_td = self.get_waveform_td(time, params,
-                                            alpha_window=alpha_window)
+        hp_td, hc_td = self.get_waveform_td(time, params, alpha_window=alpha_window)
 
-        h_fd = jnp.fft.fft(hp_td - 1j*hc_td)
-        #f = jnp.fft.fftfreq(N, delta_t)
+        h_fd = jnp.fft.fft(hp_td - 1j * hc_td)
+        # f = jnp.fft.fftfreq(N, delta_t)
 
         # obtain hp_fd and hc_fd
         # rolling the arrays to get the positive and negative frequency components
         # aligned correctly, as in np.fft.rfft
-        n = len(h_fd)//2 + 1
+        n = len(h_fd) // 2 + 1
         h_fd_positive = h_fd[:n]
         conj_h_fd_negative = jnp.conj(jnp.fft.ifftshift(h_fd))[:n][::-1]
-        hp_fd = (h_fd_positive + conj_h_fd_negative)/2
-        hc_fd = 1j*(h_fd_positive - conj_h_fd_negative)/2
+        hp_fd = (h_fd_positive + conj_h_fd_negative) / 2
+        hc_fd = 1j * (h_fd_positive - conj_h_fd_negative) / 2
         return hp_fd, hc_fd
