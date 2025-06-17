@@ -8,21 +8,21 @@ from jaxnrsur.Spline import CubicSpline
 @pytest.fixture(scope="module")
 def spline_fixture():
     x = jnp.linspace(0, 1, 5)
-    y = x ** 2
+    y = x**2
     return CubicSpline(x, y)
 
 
 def test_cubic_spline_basic(spline_fixture):
     # Check exact interpolation at grid points
     x_grid = jnp.linspace(0, 1, 5)
-    y_grid = x_grid ** 2
+    y_grid = x_grid**2
     y_interp_grid = spline_fixture(x_grid)
     assert jnp.allclose(y_interp_grid, y_grid, atol=1e-8)
 
     # Check reasonable accuracy at off-grid points (looser tolerance)
     x_test = jnp.linspace(0, 1, 10)
     y_interp = spline_fixture(x_test)
-    y_true = x_test ** 2
+    y_true = x_test**2
     max_err = jnp.max(jnp.abs(y_interp - y_true))
     print("Max error off-grid:", max_err)
     assert max_err < 0.03  # Allow a small error for natural cubic spline

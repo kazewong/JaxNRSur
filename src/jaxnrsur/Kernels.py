@@ -19,6 +19,7 @@ class Kernel(eqx.Module):
     Methods:
         __call__(X, Y): Compute the kernel between two sets of samples.
     """
+
     def __init__(self):
         super().__init__()
 
@@ -46,6 +47,7 @@ class SumKernel(Kernel):
         k1 (Kernel): First kernel.
         k2 (Kernel): Second kernel.
     """
+
     k1: Kernel
     k2: Kernel
 
@@ -78,6 +80,7 @@ class ProductKernel(Kernel):
         k1 (Kernel): First kernel.
         k2 (Kernel): Second kernel.
     """
+
     k1: Kernel
     k2: Kernel
 
@@ -111,6 +114,7 @@ class ConstantKernel(Kernel):
         x_dims (int): Number of rows in the output matrix.
         y_dims (int): Number of columns in the output matrix.
     """
+
     constant_value: float
     x_dims: int
     y_dims: int
@@ -173,6 +177,7 @@ class WhiteKernel(Kernel):
         x_dims (int): Number of rows in the output matrix.
         y_dims (int): Number of columns in the output matrix.
     """
+
     noise_level: float
     x_dims: int
     y_dims: int
@@ -249,6 +254,7 @@ class RBF(Kernel):
     Attributes:
         length_scale (float): Length scale parameter for the kernel.
     """
+
     length_scale: float
 
     def __init__(self, length_scale: float = 1.0):
