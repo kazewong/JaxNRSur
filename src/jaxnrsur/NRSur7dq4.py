@@ -1,5 +1,4 @@
 from functools import partial
-from jax.lax import abs_p
 import jax.numpy as jnp
 import jax
 from jax.scipy.special import factorial
@@ -790,7 +789,7 @@ class NRSur7dq4Model(eqx.Module):
         ells = jnp.array([x[0] for x in self.modelist_dict_extended.values()])
         ms = jnp.array([x[1] for x in self.modelist_dict_extended.values()])
 
-        matrix_coefs = jax.vmap(wigner_d_kernel)(ells, ms).T
+        matrix_coefs = jax.vmap(wigner_d_kernel)(ells, ms).T  # type: ignore
 
         # Check the gradient of this (masking out nans)
         matrix_coefs = jnp.where(

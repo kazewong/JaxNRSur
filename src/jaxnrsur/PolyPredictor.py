@@ -3,7 +3,6 @@ from beartype import beartype as typechecker
 from jaxtyping import Array, Float, Int, jaxtyped
 import equinox as eqx
 import jax
-from typing import Callable
 
 
 @jax.custom_jvp

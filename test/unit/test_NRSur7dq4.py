@@ -1,8 +1,7 @@
-from jaxnrsur.NRSur7dq4 import NRSur7dq4DataLoader, NRSur7dq4Model
+from jaxnrsur.NRSur7dq4 import NRSur7dq4Model
 import numpy as np
 import jax.numpy as jnp
 import jax
-import pytest
 from jaxnrsur.PolyPredictor import stable_power, PolyPredictor
 
 # Gradient test will fail if the jax config is not set to use 64-bit precision
@@ -25,12 +24,12 @@ class TestPolyPredictor:
         expected = jnp.array([1.0, 1.0, 4.0])
         grad_result = jax.grad(stable_power)(x, y)
         expected_grad = jnp.array([0.0, 1.0, 4.0])
-        assert jnp.allclose(result, expected), (
-            "Stable power function did not return expected values."
-        )
-        assert jnp.allclose(grad_result, expected_grad), (
-            "Gradient of stable power function did not return expected values."
-        )
+        assert jnp.allclose(
+            result, expected
+        ), "Stable power function did not return expected values."
+        assert jnp.allclose(
+            grad_result, expected_grad
+        ), "Gradient of stable power function did not return expected values."
 
 
 class TestNRSur7dq4:
