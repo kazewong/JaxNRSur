@@ -799,7 +799,7 @@ class NRSur7dq4Model(eqx.Module):
         # Get the Wigner D coefficients
         return (self.wigner_d_coefficients(quat, orbphase, mode).T * hlm_plus).T + (self.wigner_d_coefficients(quat, orbphase, (mode[0], -mode[1])).T * hlm_minus).T
 
-    def get_waveform_geometric(
+    def get_waveform_inertial(
         self,
         time: Float[Array, " n_sample"],
         params: Float[Array, " n_dim"],
@@ -929,23 +929,51 @@ class NRSur7dq4Model(eqx.Module):
             
         return inertial_h, Omega_interp
 
-        # # window surrogate start with a window that is 0 at the start, as well as zero
-        # # first and second derivative at the start, and is 1 and zero derivatives
-        # # at the end, i.e., x^3(10 + x(6x - 15))
-        # t = self.data.t_coorb - self.data.t_coorb[0]
-        # # TODO: move this setting somewhere else
-        # ALPHA_WINDOW = 0.1
-        # x = t / ALPHA_WINDOW / t[-1]
-        # window = jnp.where(x < 1, x*x*x*(10 + x*(6*x - 15)), 1.0)
-        
-        h_re = CubicSpline(self.data.t_coorb, inertial_h.real)(time)
-        h_im = CubicSpline(self.data.t_coorb, inertial_h.imag)(time)
 
-        mask = (time >= self.data.t_coorb[0]) * (time <= self.data.t_coorb[-1])
-        hp = jnp.where(mask, h_re, 0.)
-        hc = jnp.where(mask, -h_im, 0.)
         
-        return hp, hc
+    def get_waveform_geometric(
+        self,
+        time: Float[Array, " n_sample"],
+        params: Float[Array, " n_dim"],
+        theta: float = 0.0,
+        phi: float = 0.0,
+        # quaternions
+        init_quat: Float[Array, " n_quat"] = jnp.array([1.0, 0.0, 0.0, 0.0]),
+        init_orb_phase: float = 0.0,
+        ) -> tuple[Float[Array, " n_sample"], Float[Array, " n_sample"]]:
+            """
+            Get the waveform in geometric units (h*r/M).
+            """
+            # Get the inertial frame waveform and Omega_interp
+            h, Omega_interp = self.get_waveform_inertial(
+                time,
+                params,
+                theta=theta,
+                phi=phi,
+                init_quat=init_quat,
+                init_orb_phase=init_orb_phase,
+            )
+
+            # # window surrogate start with a window that is 0 at the start, as well as zero
+            # # first and second derivative at the start, and is 1 and zero derivatives
+            # # at the end, i.e., x^3(10 + x(6x - 15))
+            # t = self.data.t_coorb - self.data.t_coorb[0]
+            # # TODO: move this setting somewhere else
+            # ALPHA_WINDOW = 0.1
+            # x = t / ALPHA_WINDOW / t[-1]
+            # window = jnp.where(x < 1, x*x*x*(10 + x*(6*x - 15)), 1.0)
+
+
+            # Interpolate real and imaginary parts to the requested time array
+            h_re = CubicSpline(self.data.t_coorb, h.real)(time)
+            h_im = CubicSpline(self.data.t_coorb, h.imag)(time)
+
+            # Mask to ensure output is zero outside the model's time range
+            mask = (time >= self.data.t_coorb[0]) * (time <= self.data.t_coorb[-1])
+            hp = jnp.where(mask, h_re, 0.)
+            hc = jnp.where(mask, -h_im, 0.)
+
+            return hp, hc
 
     def get_waveform_td(self,
                         time: Float[Array, " n_sample"],
