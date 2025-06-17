@@ -2,7 +2,7 @@ import h5py
 import requests
 import os
 
-
+# Mapping of (l, m) mode tuples to HDF5 dataset keys
 h5_mode_tuple: dict[tuple[int, int], str] = {
     (2, 0): "ITEM_6",  # No Imaginary part
     (2, 1): "ITEM_5",
@@ -19,8 +19,14 @@ h5_mode_tuple: dict[tuple[int, int], str] = {
 
 
 def download_from_zenodo(url: str, local_filename: str) -> bool:
-    """
-    Helper function to download data from zenodo
+    """Download a file from a Zenodo URL and save it locally.
+
+    Args:
+        url (str): The URL to download the file from.
+        local_filename (str): The local path where the file will be saved.
+
+    Returns:
+        bool: True if the download was successful, False otherwise.
     """
     # Send the HTTP request to the URL
     response = requests.get(url, stream=True)  # type: ignore
@@ -41,6 +47,20 @@ def download_from_zenodo(url: str, local_filename: str) -> bool:
 
 
 def load_data(url: str, local_filename: str) -> h5py.File:
+    """Load an HDF5 file from cache or download it from Zenodo if not present.
+
+    The file is cached in the user's home directory under .jaxNRSur.
+
+    Args:
+        url (str): The URL to download the file from if not cached.
+        local_filename (str): The name of the file to cache and load.
+
+    Returns:
+        h5py.File: The loaded HDF5 file object.
+
+    Raises:
+        KeyError: If the file cannot be downloaded from Zenodo.
+    """
     home_directory = os.environ["HOME"]
     os.makedirs(home_directory + "/.jaxNRSur", exist_ok=True)
     try:
@@ -62,6 +82,17 @@ def load_data(url: str, local_filename: str) -> h5py.File:
 
 
 def h5Group_to_dict(h5_group: h5py.Group) -> dict:
+    """Recursively convert an h5py.Group to a nested Python dictionary.
+
+    Args:
+        h5_group (h5py.Group): The HDF5 group to convert.
+
+    Returns:
+        dict: A nested dictionary representation of the HDF5 group.
+
+    Raises:
+        ValueError: If an unknown data type is encountered in the group.
+    """
     result = {}
     for key in h5_group.keys():
         local_data = h5_group[key]
