@@ -125,32 +125,26 @@ class ConstantKernel(Kernel):
         self.x_dims = x_dims
         self.y_dims = y_dims
 
-    def load_params(self, params: dict):
+    def with_params(self, params: dict):
         """
-        Load kernel parameters from a dictionary.
+        Return a new ConstantKernel with updated parameters from a dictionary.
 
         Args:
             params (dict): Dictionary containing kernel parameters.
 
-        Raises:
-            ValueError: If the kernel name does not match.
-            KeyError: If no name is provided in params.
+        Returns:
+            ConstantKernel: New kernel instance with updated parameters.
         """
-        keys = params.keys()
         if "name" in params:
             if "ConstantKernel" not in params["name"]:
                 raise ValueError("Wrong Kernel name")
         else:
             raise KeyError("No name given")
-        if "constant_value" in keys:
-            self.constant_value = params["constant_value"]
-            print("update constant value")
-        if "x_dims" in keys:
-            self.x_dims = params["x_dims"]
-            print("update x_dims")
-        if "y_dims" in keys:
-            self.y_dims = params["y_dims"]
-            print("update y_dims")
+        return ConstantKernel(
+            constant_value=params.get("constant_value", self.constant_value),
+            x_dims=params.get("x_dims", self.x_dims),
+            y_dims=params.get("y_dims", self.y_dims),
+        )
 
     def __call__(
         self, X: Float[Array, " n_sample"], Y: Float[Array, " n_sample"]
@@ -188,32 +182,26 @@ class WhiteKernel(Kernel):
         self.x_dims = x_dims
         self.y_dims = y_dims
 
-    def load_params(self, params: dict):
+    def with_params(self, params: dict):
         """
-        Load kernel parameters from a dictionary.
+        Return a new WhiteKernel with updated parameters from a dictionary.
 
         Args:
             params (dict): Dictionary containing kernel parameters.
 
-        Raises:
-            ValueError: If the kernel name does not match.
-            KeyError: If no name is provided in params.
+        Returns:
+            WhiteKernel: New kernel instance with updated parameters.
         """
-        keys = params.keys()
         if "name" in params:
             if "WhiteKernel" not in params["name"]:
                 raise ValueError("Wrong Kernel name")
         else:
             raise KeyError("No name given")
-        if "noise_level" in keys:
-            self.noise_level = params["noise_level"]
-            print("update noise_level")
-        if "x_dims" in keys:
-            self.x_dims = params["x_dims"]
-            print("update x_dims")
-        if "y_dims" in keys:
-            self.y_dims = params["y_dims"]
-            print("update y_dims")
+        return WhiteKernel(
+            noise_level=params.get("noise_level", self.noise_level),
+            x_dims=params.get("x_dims", self.x_dims),
+            y_dims=params.get("y_dims", self.y_dims),
+        )
 
     def __call__(
         self, X: Float[Array, " n_sample"], Y: Float[Array, " n_sample"]
@@ -267,26 +255,24 @@ class RBF(Kernel):
         super().__init__()
         self.length_scale = length_scale
 
-    def load_params(self, params: dict):
+    def with_params(self, params: dict):
         """
-        Load kernel parameters from a dictionary.
+        Return a new RBF kernel with updated parameters from a dictionary.
 
         Args:
             params (dict): Dictionary containing kernel parameters.
 
-        Raises:
-            ValueError: If the kernel name does not match.
-            KeyError: If no name is provided in params.
+        Returns:
+            RBF: New kernel instance with updated parameters.
         """
-        keys = params.keys()
         if "name" in params:
             if "RBF" not in params["name"]:
                 raise ValueError("Wrong Kernel name")
         else:
             raise KeyError("No name given")
-        if "length_scale" in keys:
-            self.length_scale = params["length_scale"]
-            print("update length_scale")
+        return RBF(
+            length_scale=params.get("length_scale", self.length_scale),
+        )
 
     def __call__(
         self, X: Float[Array, " n_sample"], Y: Float[Array, " n_sample"]

@@ -28,20 +28,27 @@ class TestConstantKernel:
         assert result.shape == (2, 3)
         assert jnp.allclose(result, 3.14)
 
-    def test_load_params_frozen(self, kernel_default):
+    def test_with_params_update(self, kernel_default):
         params = {"name": "ConstantKernel", "constant_value": 2.5, "x_dims": 4, "y_dims": 5}
-        with pytest.raises(dataclasses.FrozenInstanceError):
-            kernel_default.load_params(params)
+        new_kernel = kernel_default.with_params(params)
+        assert isinstance(new_kernel, ConstantKernel)
+        assert new_kernel.constant_value == 2.5
+        assert new_kernel.x_dims == 4
+        assert new_kernel.y_dims == 5
+        # Original kernel unchanged
+        assert kernel_default.constant_value == 1.0
+        assert kernel_default.x_dims == 1
+        assert kernel_default.y_dims == 1
 
-    def test_load_params_wrong_name(self, kernel_default):
+    def test_with_params_wrong_name(self, kernel_default):
         params = {"name": "CompletelyWrong"}
         with pytest.raises(ValueError):
-            kernel_default.load_params(params)
+            kernel_default.with_params(params)
 
-    def test_load_params_no_name(self, kernel_default):
+    def test_with_params_no_name(self, kernel_default):
         params = {"constant_value": 1.0}
         with pytest.raises(KeyError):
-            kernel_default.load_params(params)
+            kernel_default.with_params(params)
 
 class TestWhiteKernel:
     @pytest.fixture
@@ -59,20 +66,27 @@ class TestWhiteKernel:
         assert result.shape == (2, 4)
         assert jnp.allclose(result, 0.0)
 
-    def test_load_params_frozen(self, kernel_default):
+    def test_with_params_update(self, kernel_default):
         params = {"name": "WhiteKernel", "noise_level": 0.2, "x_dims": 3, "y_dims": 2}
-        with pytest.raises(dataclasses.FrozenInstanceError):
-            kernel_default.load_params(params)
+        new_kernel = kernel_default.with_params(params)
+        assert isinstance(new_kernel, WhiteKernel)
+        assert new_kernel.noise_level == 0.2
+        assert new_kernel.x_dims == 3
+        assert new_kernel.y_dims == 2
+        # Original kernel unchanged
+        assert kernel_default.noise_level == 1.0
+        assert kernel_default.x_dims == 1
+        assert kernel_default.y_dims == 1
 
-    def test_load_params_wrong_name(self, kernel_default):
+    def test_with_params_wrong_name(self, kernel_default):
         params = {"name": "CompletelyWrong"}
         with pytest.raises(ValueError):
-            kernel_default.load_params(params)
+            kernel_default.with_params(params)
 
-    def test_load_params_no_name(self, kernel_default):
+    def test_with_params_no_name(self, kernel_default):
         params = {"noise_level": 1.0}
         with pytest.raises(KeyError):
-            kernel_default.load_params(params)
+            kernel_default.with_params(params)
 
 class TestRBFKernel:
     @pytest.fixture
@@ -93,20 +107,23 @@ class TestRBFKernel:
         assert result.shape == (2, 2)
         assert jnp.allclose(result, expected)
 
-    def test_load_params_frozen(self, kernel_default):
+    def test_with_params_update(self, kernel_default):
         params = {"name": "RBF", "length_scale": 3.5}
-        with pytest.raises(dataclasses.FrozenInstanceError):
-            kernel_default.load_params(params)
+        new_kernel = kernel_default.with_params(params)
+        assert isinstance(new_kernel, RBF)
+        assert new_kernel.length_scale == 3.5
+        # Original kernel unchanged
+        assert kernel_default.length_scale == 1.0
 
-    def test_load_params_wrong_name_noop(self, kernel_default):
+    def test_with_params_wrong_name(self, kernel_default):
         params = {"name": "CompletelyWrong"}
         with pytest.raises(ValueError):
-            kernel_default.load_params(params)
+            kernel_default.with_params(params)
 
-    def test_load_params_no_name(self, kernel_default):
+    def test_with_params_no_name(self, kernel_default):
         params = {"length_scale": 1.0}
         with pytest.raises(KeyError):
-            kernel_default.load_params(params)
+            kernel_default.with_params(params)
 
     def test_symmetry(self, kernel_default):
         k = RBF(length_scale=1.0)
