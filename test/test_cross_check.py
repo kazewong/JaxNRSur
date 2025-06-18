@@ -47,11 +47,8 @@ def test_waveform_agreement(test_data, jax_model: NRSur7dq4Model):
             phi=phi_ref[i],
         )
 
-        interp_ans = interp1d(
-            t_ref[i], h_ref[i], bounds_error=False, fill_value=0, kind="cubic"
-        )(jax_model.data.t_coorb)
 
         print(
             f"Sample {i}: Max abs difference in hp:",
-            np.max(np.abs(interp_ans - inertial_h)),
+            np.max(np.abs(h_ref[i]- inertial_h)),
         )
