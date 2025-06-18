@@ -25,7 +25,7 @@ jobs:
         run: uv python install ${{ matrix.python-version }}
 
       - name: Install the project
-        run: uv sync --all-extras --dev
+        run: uv sync --dev
 
       - name: Run tests and coverage
         run: |
