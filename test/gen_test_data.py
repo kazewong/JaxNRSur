@@ -40,7 +40,6 @@ for i in range(size):
         q[i],
         chi1[i],
         chi2[i],
-        dt=1,
         f_low=0,
         inclination=incl[i],
         phi_ref=phiref[i],
