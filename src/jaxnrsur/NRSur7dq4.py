@@ -812,7 +812,6 @@ class NRSur7dq4Model(eqx.Module):
 
     def get_waveform_inertial_permode(
         self,
-        time: Float[Array, " n_sample"],
         params: Float[Array, " n_dim"],
         theta: float = 0.0,
         phi: float = 0.0,
@@ -938,6 +937,12 @@ class NRSur7dq4Model(eqx.Module):
 
         inertial_h_lms += jnp.sum(hlm_projed, axis=-1).T
 
+        for idx in self.modelist_dict_extended.keys():
+            # Note the LAL convention for the phasing
+            inertial_h_lms = inertial_h_lms.at[:, idx].set(
+                self.harmonics[idx](theta, jnp.pi / 2 - phi) * inertial_h_lms[:, idx]
+            )
+
         return inertial_h_lms
 
     def get_waveform_geometric(
@@ -955,7 +960,6 @@ class NRSur7dq4Model(eqx.Module):
         """
         # Get the inertial frame waveform and Omega_interp
         h_lms = self.get_waveform_inertial_permode(
-            time,
             params,
             theta=theta,
             phi=phi,
@@ -964,23 +968,9 @@ class NRSur7dq4Model(eqx.Module):
         )
 
         # Sum along the N_modes axis with the spherical harmonics to generate strain as function of time
-        for idx in self.modelist_dict_extended.keys():
-            # Note the LAL convention for the phasing
-            h_lms = h_lms.at[:, idx].set(
-                self.harmonics[idx](theta, jnp.pi / 2 - phi) * h_lms[:, idx]
-            )
 
         h_re_per_mode = self.interp_vmap(self.data.t_coorb, h_lms.real, time)
         h_im_per_mode = self.interp_vmap(self.data.t_coorb, h_lms.imag, time)
-
-        # # window surrogate start with a window that is 0 at the start, as well as zero
-        # # first and second derivative at the start, and is 1 and zero derivatives
-        # # at the end, i.e., x^3(10 + x(6x - 15))
-        # t = self.data.t_coorb - self.data.t_coorb[0]
-        # # TODO: move this setting somewhere else
-        # ALPHA_WINDOW = 0.1
-        # x = t / ALPHA_WINDOW / t[-1]
-        # window = jnp.where(x < 1, x*x*x*(10 + x*(6*x - 15)), 1.0)
 
         # Interpolate real and imaginary parts to the requested time array
         h_re = jnp.sum(h_re_per_mode, axis=0)

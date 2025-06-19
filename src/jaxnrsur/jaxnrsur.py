@@ -2,6 +2,14 @@ import jax.numpy as jnp
 from jaxtyping import Array, Float
 
 
+# # window surrogate start with a window that is 0 at the start, as well as zero
+# # first and second derivative at the start, and is 1 and zero derivatives
+# # at the end, i.e., x^3(10 + x(6x - 15))
+# t = self.data.t_coorb - self.data.t_coorb[0]
+# # TODO: move this setting somewhere else
+# ALPHA_WINDOW = 0.1
+# x = t / ALPHA_WINDOW / t[-1]
+# window = jnp.where(x < 1, x*x*x*(10 + x*(6*x - 15)), 1.0)
 def get_waveform_td(
     self,
     time: Float[Array, " n_sample"],
