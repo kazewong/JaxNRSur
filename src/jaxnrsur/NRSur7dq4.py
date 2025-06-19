@@ -144,12 +144,9 @@ class NRSur7dq4DataLoader(eqx.Module):
 
         assert coorb_nmax == basis_nmax, "coorb_nmax must equal to basis_nmax"
 
-        # TODO: Remove the following self.coorb poly predictor
         coorb = self.read_coorb(data, coorb_nmax)
         predictors_parameters, n_max = eqx.partition(coorb, eqx.is_array)
         self.n_max = n_max
-
-        # TODO: Initialize rk4_polypredictor
 
         n_steps = 3
         rk4_coefs = predictors_parameters.coefs
@@ -785,7 +782,6 @@ class NRSur7dq4Model(eqx.Module):
             )
             return result
 
-        # TODO: Find a more jax way to extract the modes
         ells = jnp.array([x[0] for x in self.modelist_dict_extended.values()])
         ms = jnp.array([x[1] for x in self.modelist_dict_extended.values()])
 
@@ -824,7 +820,6 @@ class NRSur7dq4Model(eqx.Module):
         init_quat: Float[Array, " n_quat"] = jnp.array([1.0, 0.0, 0.0, 0.0]),
         init_orb_phase: float = 0.0,
     ) -> tuple[Float[Array, " n_sample"], Float[Array, " n_sample"]]:
-        # TODO set up the appropriate t_low etc
 
         # Initialize Omega with structure:
         # Omega = [Quaterion, Orb phase, spin_1, spin_2]
@@ -915,7 +910,6 @@ class NRSur7dq4Model(eqx.Module):
             jax.vmap(self._get_coorb_params, in_axes=(None, 0))(q, Omega_interp)
         )
 
-        # TODO need to work out how to vmap this later
         inertial_h_lms = jnp.zeros(
             (len(self.data.t_coorb), self.n_modes_extended), dtype=complex
         )
