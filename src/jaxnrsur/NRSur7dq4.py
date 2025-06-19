@@ -12,7 +12,7 @@ from jaxnrsur.PolyPredictor import (
     evaluate_ensemble_dynamics,
     make_polypredictor_ensemble,
 )
-from jaxtyping import Array, Float
+from jaxtyping import Array, Float, Complex
 import equinox as eqx
 
 
@@ -810,7 +810,7 @@ class NRSur7dq4Model(eqx.Module):
             * hlm_minus
         ).T
 
-    def get_waveform_inertial(
+    def get_waveform_inertial_permode(
         self,
         time: Float[Array, " n_sample"],
         params: Float[Array, " n_dim"],
@@ -819,7 +819,7 @@ class NRSur7dq4Model(eqx.Module):
         # quaternions
         init_quat: Float[Array, " n_quat"] = jnp.array([1.0, 0.0, 0.0, 0.0]),
         init_orb_phase: float = 0.0,
-    ) -> tuple[Float[Array, " n_sample"], Float[Array, " n_sample"]]:
+    ) -> Complex[Array, "n_mode n_sample"]:
 
         # Initialize Omega with structure:
         # Omega = [Quaterion, Orb phase, spin_1, spin_2]
@@ -892,6 +892,10 @@ class NRSur7dq4Model(eqx.Module):
         Omega = jnp.concatenate([Omega_0[jnp.newaxis, :], Omega_rk4, Omega], axis=0)
 
         # Interpolating to the coorbital time array
+        # NOTE: the interpolated omega currently has a 1e-5 level discrepancy
+        # compared to the original NRSur7dq4 code.
+        # It is either from the integrator or the interpolation.
+        # This should be investigated further.
         Omega_interp = self.interp_omega(
             self.data.t_ds_array,
             Omega,
@@ -935,15 +939,7 @@ class NRSur7dq4Model(eqx.Module):
 
         inertial_h_lms += jnp.sum(hlm_projed, axis=-1).T
 
-        # Sum along the N_modes axis with the spherical harmonics to generate strain as function of time
-        inertial_h = jnp.zeros(len(self.data.t_coorb), dtype=complex)
-        for idx in self.modelist_dict_extended.keys():
-            # Note the LAL convention for the phasing
-            inertial_h += (
-                self.harmonics[idx](theta, jnp.pi / 2 - phi) * inertial_h_lms[:, idx]
-            )
-
-        return inertial_h, Omega_interp
+        return inertial_h_lms
 
     def get_waveform_geometric(
         self,
@@ -959,7 +955,7 @@ class NRSur7dq4Model(eqx.Module):
         Get the waveform in geometric units (h*r/M).
         """
         # Get the inertial frame waveform and Omega_interp
-        h, Omega_interp = self.get_waveform_inertial(
+        h_lms = self.get_waveform_inertial_permode(
             time,
             params,
             theta=theta,
@@ -967,6 +963,14 @@ class NRSur7dq4Model(eqx.Module):
             init_quat=init_quat,
             init_orb_phase=init_orb_phase,
         )
+
+        # Sum along the N_modes axis with the spherical harmonics to generate strain as function of time
+        inertial_h = jnp.zeros(len(self.data.t_coorb), dtype=complex)
+        for idx in self.modelist_dict_extended.keys():
+            # Note the LAL convention for the phasing
+            inertial_h += (
+                self.harmonics[idx](theta, jnp.pi / 2 - phi) * h_lms[:, idx]
+            )
 
         # # window surrogate start with a window that is 0 at the start, as well as zero
         # # first and second derivative at the start, and is 1 and zero derivatives
@@ -978,8 +982,8 @@ class NRSur7dq4Model(eqx.Module):
         # window = jnp.where(x < 1, x*x*x*(10 + x*(6*x - 15)), 1.0)
 
         # Interpolate real and imaginary parts to the requested time array
-        h_re = CubicSpline(self.data.t_coorb, h.real)(time)
-        h_im = CubicSpline(self.data.t_coorb, h.imag)(time)
+        h_re = CubicSpline(self.data.t_coorb, h_lms.real)(time)
+        h_im = CubicSpline(self.data.t_coorb, h_lms.imag)(time)
 
         # Mask to ensure output is zero outside the model's time range
         mask = (time >= self.data.t_coorb[0]) * (time <= self.data.t_coorb[-1])
@@ -987,87 +991,3 @@ class NRSur7dq4Model(eqx.Module):
         hc = jnp.where(mask, -h_im, 0.0)
 
         return hp, hc
-
-    def get_waveform_td(
-        self,
-        time: Float[Array, " n_sample"],
-        params: Float[Array, " n_param"],
-        alpha_window: float = 0.0,
-    ) -> tuple[Float[Array, " n_sample"], Float[Array, " n_sample"]]:
-        """
-        Get the waveform in the time domain in SI units.
-        """
-        # get scaling parameters
-        mtot = params[0]
-        dist_mpc = params[1]
-
-        # geometric units to SI
-        GMSUN_SI = 1.32712442099000e20
-        C_SI = 2.99792458000000e08
-        RSUN_SI = GMSUN_SI / C_SI**2
-
-        # parsecs to SI
-        PC_SI = 3.08567758149136720000e16
-        MPC_SI = 1e6 * PC_SI
-
-        # form time array with desired sampling rate and duration
-        # N = int(seglen*srate)
-        # time = jnp.arange(N)/srate - seglen + 2
-
-        # evaluate the surrogate over the equivalent geometric time
-        time_m = time * C_SI / RSUN_SI / mtot
-        hrM_p, hrM_c = self.get_waveform_geometric(time_m, jnp.array(params[2:]))
-
-        if alpha_window > 0:
-            # create a window for the waveform: the form of the window
-            # is chosen such that it is 0 at the start, as well as zero
-            # first and second derivative at the start, and is 1 and zero
-            # derivatives at the end.
-            Tcoorb = self.data.t_coorb[-1] - self.data.t_coorb[0]
-
-            window_start = jnp.max(jnp.array([time_m[0], self.data.t_coorb[0]]))
-            window_end = window_start + alpha_window * Tcoorb
-
-            x = (time_m - window_start) / (window_end - window_start)
-
-            window = jnp.select(
-                [time_m < window_start, time_m > window_end],
-                [0.0, 1.0],
-                default=x * x * x * (10 + x * (6 * x - 15)),
-            )
-            hrM_p *= window
-            hrM_c *= window
-
-        # this is h * r / M, so scale by the mass and distance
-        const = mtot * RSUN_SI / dist_mpc / MPC_SI
-        return hrM_p * const, hrM_c * const
-
-    def get_waveform_fd(
-        self,
-        time: Float[Array, " n_sample"],
-        params: Float[Array, " n_param"],
-        alpha_window: float = 0.1,
-    ) -> tuple[Float[Array, " n_freq"], Float[Array, " n_freq"]]:
-        """
-        Get the waveform in the frequency domain.
-        """
-        # this could be moved inside get_waveform_td if
-        # we change the API to have seglen and delta_t as
-        # input, rather than time
-        # N = int(seglen/delta_t)
-        # time = jnp.arange(N)*delta_t - seglen + 2
-
-        hp_td, hc_td = self.get_waveform_td(time, params, alpha_window=alpha_window)
-
-        h_fd = jnp.fft.fft(hp_td - 1j * hc_td)
-        # f = jnp.fft.fftfreq(N, delta_t)
-
-        # obtain hp_fd and hc_fd
-        # rolling the arrays to get the positive and negative frequency components
-        # aligned correctly, as in np.fft.rfft
-        n = len(h_fd) // 2 + 1
-        h_fd_positive = h_fd[:n]
-        conj_h_fd_negative = jnp.conj(jnp.fft.ifftshift(h_fd))[:n][::-1]
-        hp_fd = (h_fd_positive + conj_h_fd_negative) / 2
-        hc_fd = 1j * (h_fd_positive - conj_h_fd_negative) / 2
-        return hp_fd, hc_fd
