@@ -12,6 +12,7 @@ from jaxnrsur.Kernels import (
     cdist,
 )
 
+
 class TestConstantKernel:
     @pytest.fixture
     def kernel(self):
@@ -29,7 +30,12 @@ class TestConstantKernel:
         assert jnp.allclose(result, 3.14)
 
     def test_with_params_update(self, kernel_default):
-        params = {"name": "ConstantKernel", "constant_value": 2.5, "x_dims": 4, "y_dims": 5}
+        params = {
+            "name": "ConstantKernel",
+            "constant_value": 2.5,
+            "x_dims": 4,
+            "y_dims": 5,
+        }
         new_kernel = kernel_default.with_params(params)
         assert isinstance(new_kernel, ConstantKernel)
         assert new_kernel.constant_value == 2.5
@@ -49,6 +55,7 @@ class TestConstantKernel:
         params = {"constant_value": 1.0}
         with pytest.raises(KeyError):
             kernel_default.with_params(params)
+
 
 class TestWhiteKernel:
     @pytest.fixture
@@ -88,6 +95,7 @@ class TestWhiteKernel:
         with pytest.raises(KeyError):
             kernel_default.with_params(params)
 
+
 class TestRBFKernel:
     @pytest.fixture
     def kernel(self):
@@ -102,7 +110,7 @@ class TestRBFKernel:
         Y = jnp.array([[0.0], [2.0]])
         result = kernel(X, Y)
         dists = jnp.array([[0.0, 4.0], [1.0, 1.0]])
-        dists = dists / (2.0 ** 2)
+        dists = dists / (2.0**2)
         expected = jnp.exp(-0.5 * dists)
         assert result.shape == (2, 2)
         assert jnp.allclose(result, expected)
@@ -138,6 +146,7 @@ class TestRBFKernel:
         diag = jnp.diag(result)
         assert jnp.allclose(diag, 1.0)
 
+
 class TestCompositeKernels:
     def test_sum_kernel(self):
         k1 = ConstantKernel(constant_value=2.0, x_dims=2, y_dims=2)
@@ -171,6 +180,7 @@ class TestCompositeKernels:
         assert jnp.allclose(sum_result, k1(X, Y))
         assert jnp.allclose(prod_result, 0.0)
 
+
 class TestUtils:
     def test_cdist(self):
         X = jnp.array([[0.0, 0.0], [1.0, 0.0]])
@@ -180,11 +190,13 @@ class TestUtils:
         assert result.shape == (2, 2)
         assert jnp.allclose(result, expected)
 
+
 class TestKernelBase:
     def test_kernel_abstract_call(self):
         class DummyKernel(Kernel):
             def __call__(self, X, Y):
                 return X + Y
+
         k = DummyKernel()
         X = jnp.array([1.0])
         Y = jnp.array([2.0])

@@ -20,14 +20,15 @@ class TestPolyPredictor:
     def test_stable_power(self):
         x = jnp.array([0.0, 1.0, 2.0])
         y = jnp.array([0.0, 1.0, 2.0])
+
         def loss_fn(x, y):
             return jnp.sum(stable_power(x, y))
-            
+
         grad_fn = jax.grad(loss_fn, argnums=(0, 1))
         result = stable_power(x, y)
         grad_result = grad_fn(x, y)
         expected = jnp.array([1.0, 1.0, 4.0])
-        expected_grad = jnp.array([[0.0, 1.0, 4.0], [0.0, 0.0, jnp.log(2.)*4.]])
+        expected_grad = jnp.array([[0.0, 1.0, 4.0], [0.0, 0.0, jnp.log(2.0) * 4.0]])
         assert jnp.allclose(result, expected)
         assert jnp.allclose(grad_result[0], expected_grad[0])
         assert jnp.allclose(grad_result[1], expected_grad[1])

@@ -647,12 +647,12 @@ class NRSur7dq4Model(eqx.Module):
 
     @staticmethod
     @partial(jax.vmap, in_axes=(None, 1, None))
-    def interp_omega(
+    def interp_vmap(
         time_grid: Float[Array, " n_grid"],
-        Omega: Float[Array, " n_grid n_omega"],
+        data: Float[Array, " n_grid n_data"],
         time_interp: Float[Array, " n_sample"],
-    ) -> Float[Array, " n_sample n_omega"]:
-        return CubicSpline(time_grid, Omega)(time_interp)
+    ) -> Float[Array, " n_sample n_data"]:
+        return CubicSpline(time_grid, data)(time_interp)
 
     @staticmethod
     def multiply_quats(q1, q2):
@@ -820,7 +820,6 @@ class NRSur7dq4Model(eqx.Module):
         init_quat: Float[Array, " n_quat"] = jnp.array([1.0, 0.0, 0.0, 0.0]),
         init_orb_phase: float = 0.0,
     ) -> Complex[Array, "n_mode n_sample"]:
-
         # Initialize Omega with structure:
         # Omega = [Quaterion, Orb phase, spin_1, spin_2]
         # Note that the spins are in the coprecessing frame
@@ -896,7 +895,7 @@ class NRSur7dq4Model(eqx.Module):
         # compared to the original NRSur7dq4 code.
         # It is either from the integrator or the interpolation.
         # This should be investigated further.
-        Omega_interp = self.interp_omega(
+        Omega_interp = self.interp_vmap(
             self.data.t_ds_array,
             Omega,
             self.data.t_coorb,
@@ -965,12 +964,14 @@ class NRSur7dq4Model(eqx.Module):
         )
 
         # Sum along the N_modes axis with the spherical harmonics to generate strain as function of time
-        inertial_h = jnp.zeros(len(self.data.t_coorb), dtype=complex)
         for idx in self.modelist_dict_extended.keys():
             # Note the LAL convention for the phasing
-            inertial_h += (
+            h_lms = h_lms.at[:, idx].set(
                 self.harmonics[idx](theta, jnp.pi / 2 - phi) * h_lms[:, idx]
             )
+
+        h_re_per_mode = self.interp_vmap(self.data.t_coorb, h_lms.real, time)
+        h_im_per_mode = self.interp_vmap(self.data.t_coorb, h_lms.imag, time)
 
         # # window surrogate start with a window that is 0 at the start, as well as zero
         # # first and second derivative at the start, and is 1 and zero derivatives
@@ -982,8 +983,8 @@ class NRSur7dq4Model(eqx.Module):
         # window = jnp.where(x < 1, x*x*x*(10 + x*(6*x - 15)), 1.0)
 
         # Interpolate real and imaginary parts to the requested time array
-        h_re = CubicSpline(self.data.t_coorb, h_lms.real)(time)
-        h_im = CubicSpline(self.data.t_coorb, h_lms.imag)(time)
+        h_re = jnp.sum(h_re_per_mode, axis=0)
+        h_im = jnp.sum(h_im_per_mode, axis=0)
 
         # Mask to ensure output is zero outside the model's time range
         mask = (time >= self.data.t_coorb[0]) * (time <= self.data.t_coorb[-1])

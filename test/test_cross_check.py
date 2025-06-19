@@ -14,6 +14,7 @@ jax.config.update("jax_enable_x64", True)
 def test_data():
     return np.load("test/test_data.npz", allow_pickle=True)
 
+
 @pytest.fixture(scope="module")
 def jax_model():
     return NRSur7dq4Model()
@@ -47,8 +48,7 @@ def test_waveform_agreement(test_data, jax_model: NRSur7dq4Model):
             phi=phi_ref[i],
         )
 
-
         print(
             f"Sample {i}: Max abs difference in hp:",
-            np.max(np.abs(h_ref[i]- inertial_h)),
+            np.max(np.abs(h_ref[i] - inertial_h)),
         )

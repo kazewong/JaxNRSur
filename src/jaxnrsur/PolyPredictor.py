@@ -48,6 +48,7 @@ class PolyPredictor(eqx.Module):
         bfOrders (Float[Array, " n_sum n_lambda"]): Basis function orders.
         n_max (Int): Maximum number of nodes.
     """
+
     coefs: Float[Array, " n_sum"]
     bfOrders: Float[Array, " n_sum n_lambda"]
     n_max: Int

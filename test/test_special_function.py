@@ -3,6 +3,7 @@ import pytest
 import jax
 from jaxnrsur.special_function import comb, effective_spin
 
+
 class TestComb:
     @pytest.mark.parametrize(
         "N, k, expected",
