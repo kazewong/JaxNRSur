@@ -1,4 +1,4 @@
-import gwsurrogate
+import gwsurrogate # type: ignore
 import numpy as np
 
 seed = 124091248
