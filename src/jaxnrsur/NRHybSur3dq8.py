@@ -2,7 +2,7 @@ import h5py
 
 import jax.numpy as jnp
 import jax
-from jaxnrsur.DataLoader import load_data, h5Group_to_dict, h5_mode_tuple
+from jaxnrsur.DataLoader import load_data, h5Group_to_dict, h5_mode_tuple, DataLoader
 from jaxnrsur.Spline import CubicSpline
 from jaxnrsur.EIMPredictor import EIMpredictor
 from jaxnrsur.Harmonics import SpinWeightedSphericalHarmonics
@@ -297,4 +297,9 @@ class NRHybSur3dq8Model(eqx.Module):
                 * jnp.conj(modes[i])
                 * self.negative_harmonics[i](theta, phi)
             )
-        return waveform
+
+        # Mask to ensure output is zero outside the model's time range
+        mask = (time >= self.data.sur_time[0]) * (time <= self.data.sur_time[-1])
+        hp = jnp.where(mask, waveform.real, 0.0)
+        hc = jnp.where(mask, -waveform.imag, 0.0)
+        return hp, hc

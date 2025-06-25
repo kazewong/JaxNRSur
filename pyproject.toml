@@ -49,6 +49,7 @@ dev = [
     "ipython>=9.2.0",
     "notebook>=7.4.3",
     "pytest>=8.4.0",
+    "ruff>=0.12.0",
 ]
 
 [tool.uv.sources]

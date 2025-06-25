@@ -1,6 +1,14 @@
 import h5py
 import requests
 import os
+from jaxtyping import Array, Float
+import equinox as eqx
+
+
+class DataLoader(eqx.Module):
+    sur_time: Float[Array, " n_sample"]
+    modes: list
+
 
 # Mapping of (l, m) mode tuples to HDF5 dataset keys
 h5_mode_tuple: dict[tuple[int, int], str] = {

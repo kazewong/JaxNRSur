@@ -76,7 +76,7 @@ class NRSur7dq4Mode:
 
 
 class NRSur7dq4DataLoader(eqx.Module):
-    sur_time: Float[Array, " n_sample"] # coorbital time t_coorb
+    sur_time: Float[Array, " n_sample"]  # coorbital time t_coorb
     t_ds: Float[Array, " n_dynam"]
     diff_t_ds: Float[Array, " n_dynam"]
 
@@ -766,7 +766,7 @@ class NRSur7dq4Model(eqx.Module):
             summation = (
                 (
                     (-1) ** rho
-                    * comb_vmap(ell + m_p, rho) # type: ignore
+                    * comb_vmap(ell + m_p, rho)  # type: ignore
                     * comb_vmap(ell - m_p, ell - rho - m)
                 )
                 * abs_R_ratio[:, None] ** (2 * rho)
