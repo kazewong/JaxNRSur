@@ -6,6 +6,7 @@ from jaxnrsur.DataLoader import load_data, h5Group_to_dict, h5_mode_tuple
 from jaxnrsur.Spline import CubicSpline
 from jaxnrsur.EIMPredictor import EIMpredictor
 from jaxnrsur.Harmonics import SpinWeightedSphericalHarmonics
+from jaxnrsur.jaxnrsur import WaveformModel
 from jaxtyping import Array, Float, Int
 import equinox as eqx
 
@@ -64,9 +65,9 @@ class NRHybSur3dq8DataLoader(eqx.Module):
                     except ValueError:
                         raise ValueError("GPR Fit info doesn't exist")
 
-                    assert isinstance(fit_data, h5py.Group), (
-                        "GPR Fit info is not a group"
-                    )
+                    assert isinstance(
+                        fit_data, h5py.Group
+                    ), "GPR Fit info is not a group"
                     res = h5Group_to_dict(fit_data)
                     node_predictor = EIMpredictor(res)
                     predictors.append(node_predictor)
@@ -116,7 +117,7 @@ class NRHybSur3dq8DataLoader(eqx.Module):
         return result
 
 
-class NRHybSur3dq8Model(eqx.Module):
+class NRHybSur3dq8Model(WaveformModel):
     data: NRHybSur3dq8DataLoader
     mode_no22: list[dict]
     harmonics: list[SpinWeightedSphericalHarmonics]
@@ -149,7 +150,7 @@ class NRHybSur3dq8Model(eqx.Module):
         Args:
             modelist (list[tuple[int, int]]): List of modes to be used.
         """
-        self.data = NRHybSur3dq8DataLoader(modelist=modelist)
+        self.data = NRHybSur3dq8DataLoader(modelist=modelist)  # type: ignore
         self.harmonics = []
         self.negative_harmonics = []
         negative_mode_prefactor = []

@@ -4,7 +4,7 @@ import jax
 from jax.scipy.special import factorial
 from jaxnrsur.Spline import CubicSpline
 from jaxnrsur.Harmonics import SpinWeightedSphericalHarmonics
-from jaxnrsur.DataLoader import load_data, h5Group_to_dict
+from jaxnrsur.DataLoader import load_data, h5Group_to_dict, DataLoader
 from jaxnrsur.special_function import comb
 from jaxnrsur.PolyPredictor import (
     PolyPredictor,
@@ -12,6 +12,7 @@ from jaxnrsur.PolyPredictor import (
     evaluate_ensemble_dynamics,
     make_polypredictor_ensemble,
 )
+from jaxnrsur.jaxnrsur import WaveformModel
 from jaxtyping import Array, Float, Complex
 import equinox as eqx
 
@@ -75,7 +76,7 @@ class NRSur7dq4Mode:
         self.mode = mode
 
 
-class NRSur7dq4DataLoader(eqx.Module):
+class NRSur7dq4DataLoader(DataLoader):
     sur_time: Float[Array, " n_sample"]  # coorbital time t_coorb
     t_ds: Float[Array, " n_dynam"]
     diff_t_ds: Float[Array, " n_dynam"]
@@ -313,7 +314,7 @@ class NRSur7dq4DataLoader(eqx.Module):
         return result
 
 
-class NRSur7dq4Model(eqx.Module):
+class NRSur7dq4Model(WaveformModel):
     data: NRSur7dq4DataLoader
     modelist_dict: dict
     modelist_dict_extended: dict
@@ -339,7 +340,7 @@ class NRSur7dq4Model(eqx.Module):
             (4, 4),
         ],
     ):
-        self.data = NRSur7dq4DataLoader(modelist=modelist)
+        self.data = NRSur7dq4DataLoader(modelist=modelist)  # type: ignore
         self.harmonics = []
 
         self.n_modes = len(modelist)

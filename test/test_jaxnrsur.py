@@ -1,6 +1,8 @@
 import pytest
 import jax.numpy as jnp
 from jaxnrsur.jaxnrsur import JaxNRSur, WaveformModel, DataLoader, RSUN_SI, MPC_SI, C_SI
+from jaxnrsur.NRSur7dq4 import NRSur7dq4Model
+from jaxnrsur.NRHybSur3dq8 import NRHybSur3dq8Model
 from jaxtyping import Float, Array
 
 # INFO: This test suites is mostly generated with AI and edited by Kaze. W. K. Wong.
@@ -49,8 +51,13 @@ def test_get_waveform_td_basic(jaxnrsur_instance):
     time_m = time * C_SI / RSUN_SI / mtot
 
     # Reproduce the window function from JaxNRSur
-    Tcoorb = jaxnrsur_instance.model.data.sur_time[-1] - jaxnrsur_instance.model.data.sur_time[0]
-    window_start = jnp.max(jnp.array([time_m[0], jaxnrsur_instance.model.data.sur_time[0]]))
+    Tcoorb = (
+        jaxnrsur_instance.model.data.sur_time[-1]
+        - jaxnrsur_instance.model.data.sur_time[0]
+    )
+    window_start = jnp.max(
+        jnp.array([time_m[0], jaxnrsur_instance.model.data.sur_time[0]])
+    )
     window_end = window_start + jaxnrsur_instance.alpha_window * Tcoorb
     x = (time_m - window_start) / (window_end - window_start)
     window = jnp.select(
@@ -87,6 +94,27 @@ def test_get_waveform_fd_basic(jaxnrsur_instance):
     # Should be complex arrays
     assert jnp.iscomplexobj(hp_fd)
     assert jnp.iscomplexobj(hc_fd)
+
+
+def test_nrsur7dq4model_waveform():
+    model = NRSur7dq4Model()
+    jaxnrsur = JaxNRSur(model=model, alpha_window=0.1)
+    # Just check that the model runs and returns arrays of correct shape
+    time = jnp.linspace(0, 1, 100)
+    params = jnp.array([30.0, 100.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])  # mtot, dist_mpc, chi1z, chi2z, theta1, phi1, theta2, phi2
+    hp, hc = jaxnrsur.get_waveform_td(time, params)
+    assert hp.shape == time.shape
+    assert hc.shape == time.shape
+    
+def test_nrhybsur3dq8model_waveform():
+    model = NRHybSur3dq8Model()
+    jaxnrsur = JaxNRSur(model=model, alpha_window=0.1)
+    # Just check that the model runs and returns arrays of correct shape
+    time = jnp.linspace(0, 1, 100)
+    params = jnp.array([30.0, 100.0, 0.9, 0.1, 0.1])  # mtot, dist_mpc, q, chi1z, chi2z
+    hp, hc = jaxnrsur.get_waveform_td(time, params)
+    assert hp.shape == time.shape
+    assert hc.shape == time.shape
 
 
 def test_waveformmodel_not_implemented():
