@@ -22,7 +22,6 @@ def jax_model():
 
 def test_waveform_agreement(test_data, jax_model: NRSur7dq4Model):
     # Reference waveform loaded from file
-    t_ref = test_data["t"]
     h_ref = test_data["h"]  # shape: (2, N) or (N, 2) depending on convention
     theta_ref = test_data["incl"]
     phi_ref = test_data["phiref"]

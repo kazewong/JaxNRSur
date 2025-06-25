@@ -2,7 +2,7 @@ import h5py
 
 import jax.numpy as jnp
 import jax
-from jaxnrsur.DataLoader import load_data, h5Group_to_dict, h5_mode_tuple, DataLoader
+from jaxnrsur.DataLoader import load_data, h5Group_to_dict, h5_mode_tuple
 from jaxnrsur.Spline import CubicSpline
 from jaxnrsur.EIMPredictor import EIMpredictor
 from jaxnrsur.Harmonics import SpinWeightedSphericalHarmonics
@@ -64,9 +64,9 @@ class NRHybSur3dq8DataLoader(eqx.Module):
                     except ValueError:
                         raise ValueError("GPR Fit info doesn't exist")
 
-                    assert isinstance(fit_data, h5py.Group), (
-                        "GPR Fit info is not a group"
-                    )
+                    assert isinstance(
+                        fit_data, h5py.Group
+                    ), "GPR Fit info is not a group"
                     res = h5Group_to_dict(fit_data)
                     node_predictor = EIMpredictor(res)
                     predictors.append(node_predictor)
@@ -183,7 +183,7 @@ class NRHybSur3dq8Model(eqx.Module):
         params: Float[Array, " n_dim"],
         theta: float = 0.0,
         phi: float = 0.0,
-    ) -> Float[Array, " n_sample"]:
+    ) -> tuple[Float[Array, " n_sample"], Float[Array, " n_sample"]]:
         """
         Alias for get_waveform.
 

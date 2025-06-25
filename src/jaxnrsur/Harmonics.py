@@ -104,13 +104,13 @@ class SpinWeightedSphericalHarmonics(eqx.Module):
         """
         Pm = 1.0
 
-        l = l_mode
+        ell = l_mode
         m = m_mode
         s = s_mode
 
-        if l < 0:
+        if ell < 0:
             raise ValueError("l must be non-negative")
-        if abs(m) > l or l < abs(s):
+        if abs(m) > ell or ell < abs(s):
             raise ValueError("l must be greater than or equal to |s| and |m|")
 
         if abs(m_mode) < abs(s_mode):
@@ -127,7 +127,7 @@ class SpinWeightedSphericalHarmonics(eqx.Module):
 
         self.Pm_coeff = Pm
         self.s_mode = s
-        self.l_mode = l
+        self.l_mode = ell
         self.m_mode = m
         self.mm_mode = m_mode
 

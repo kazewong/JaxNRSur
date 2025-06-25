@@ -1,7 +1,5 @@
 import pytest
 import jax.numpy as jnp
-import dataclasses
-from jax import random
 from jaxnrsur.Kernels import (
     Kernel,
     SumKernel,
