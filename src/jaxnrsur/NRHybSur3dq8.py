@@ -269,7 +269,7 @@ class NRHybSur3dq8Model(eqx.Module):
         params: Float[Array, " n_dim"],
         theta: float = 0.0,
         phi: float = 0.0,
-    ) -> Float[Array, " n_sample"]:
+    ) -> tuple[Float[Array, " n_sample"], Float[Array, " n_sample"]]:
         """
         Current implementation sepearates the 22 mode from the rest of the modes,
         because of the data strucutre and how they are combined.
