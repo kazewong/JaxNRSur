@@ -64,9 +64,9 @@ class NRHybSur3dq8DataLoader(eqx.Module):
                     except ValueError:
                         raise ValueError("GPR Fit info doesn't exist")
 
-                    assert isinstance(
-                        fit_data, h5py.Group
-                    ), "GPR Fit info is not a group"
+                    assert isinstance(fit_data, h5py.Group), (
+                        "GPR Fit info is not a group"
+                    )
                     res = h5Group_to_dict(fit_data)
                     node_predictor = EIMpredictor(res)
                     predictors.append(node_predictor)

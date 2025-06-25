@@ -32,6 +32,36 @@ class JaxNRSur:
     model: WaveformModel
     alpha_window: float = 0.1
 
+    def __init__(self, model: WaveformModel, alpha_window: float = 0.1):
+        self.model = model
+        self.alpha_window = alpha_window
+
+    def window_function(
+        self,
+        t: Float[Array, " n_sample"],
+        hp: Float[Array, " n_sample"],
+        hc: Float[Array, " n_sample"],
+    ) -> tuple[Float[Array, " n_sample"], Float[Array, " n_sample"]]:
+        # create a window for the waveform: the form of the window
+        # is chosen such that it is 0 at the start, as well as zero
+        # first and second derivative at the start, and is 1 and zero
+        # derivatives at the end.
+        Tcoorb = self.model.data.sur_time[-1] - self.model.data.sur_time[0]
+
+        window_start = jnp.max(jnp.array([t[0], self.model.data.sur_time[0]]))
+        window_end = window_start + self.alpha_window * Tcoorb
+
+        x = (t - window_start) / (window_end - window_start)
+
+        window = jnp.select(
+            [t < window_start, t > window_end],
+            [0.0, 1.0],
+            default=x * x * x * (10 + x * (6 * x - 15)),
+        )
+        hp *= window
+        hc *= window
+        return hp, hc
+
     # # window surrogate start with a window that is 0 at the start, as well as zero
     # # first and second derivative at the start, and is 1 and zero derivatives
     # # at the end, i.e., x^3(10 + x(6x - 15))
@@ -61,24 +91,7 @@ class JaxNRSur:
         )
 
         if self.alpha_window > 0:
-            # create a window for the waveform: the form of the window
-            # is chosen such that it is 0 at the start, as well as zero
-            # first and second derivative at the start, and is 1 and zero
-            # derivatives at the end.
-            Tcoorb = self.model.data.sur_time[-1] - self.model.data.sur_time[0]
-
-            window_start = jnp.max(jnp.array([time_m[0], self.model.data.sur_time[0]]))
-            window_end = window_start + self.alpha_window * Tcoorb
-
-            x = (time_m - window_start) / (window_end - window_start)
-
-            window = jnp.select(
-                [time_m < window_start, time_m > window_end],
-                [0.0, 1.0],
-                default=x * x * x * (10 + x * (6 * x - 15)),
-            )
-            hrM_p *= window
-            hrM_c *= window
+            hrM_p, hrM_c = self.window_function(time_m, hrM_p, hrM_c)
 
         # this is h * r / M, so scale by the mass and distance
         const = mtot * RSUN_SI / dist_mpc / MPC_SI
