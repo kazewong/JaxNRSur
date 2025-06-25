@@ -101,7 +101,7 @@ def test_nrsur7dq4model_waveform():
     jaxnrsur = JaxNRSur(model=model, alpha_window=0.1)
     # Just check that the model runs and returns arrays of correct shape
     time = jnp.linspace(0, 1, 100)
-    params = jnp.array([30.0, 100.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])  # mtot, dist_mpc, chi1z, chi2z, theta1, phi1, theta2, phi2
+    params = jnp.array([30.0, 100.0, 3., 0.5, 0.0, 0.0, 0.0, 0.5, 0.0])  # mtot, dist_mpc, chi1z, chi2z, theta1, phi1, theta2, phi2
     hp, hc = jaxnrsur.get_waveform_td(time, params)
     assert hp.shape == time.shape
     assert hc.shape == time.shape
