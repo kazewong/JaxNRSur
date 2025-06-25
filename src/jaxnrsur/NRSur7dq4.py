@@ -76,7 +76,7 @@ class NRSur7dq4Mode:
 
 
 class NRSur7dq4DataLoader(eqx.Module):
-    t_coorb: Float[Array, " n_sample"]
+    sur_time: Float[Array, " n_sample"] # coorbital time t_coorb
     t_ds: Float[Array, " n_dynam"]
     diff_t_ds: Float[Array, " n_dynam"]
 
@@ -120,7 +120,7 @@ class NRSur7dq4DataLoader(eqx.Module):
         )
 
         data = h5Group_to_dict(h5_file)
-        self.t_coorb = jnp.array(data["t_coorb"])
+        self.sur_time = jnp.array(data["t_coorb"])
         self.t_ds = jnp.array(data["t_ds"])
         self.diff_t_ds = jnp.diff(self.t_ds)
 
@@ -766,7 +766,7 @@ class NRSur7dq4Model(eqx.Module):
             summation = (
                 (
                     (-1) ** rho
-                    * comb_vmap(ell + m_p, rho)
+                    * comb_vmap(ell + m_p, rho) # type: ignore
                     * comb_vmap(ell - m_p, ell - rho - m)
                 )
                 * abs_R_ratio[:, None] ** (2 * rho)
@@ -897,7 +897,7 @@ class NRSur7dq4Model(eqx.Module):
         Omega_interp = self.interp_vmap(
             self.data.t_ds_array,
             Omega,
-            self.data.t_coorb,
+            self.data.sur_time,
         ).T
 
         Omega_interp = Omega_interp.at[:, :4].set(
@@ -913,7 +913,7 @@ class NRSur7dq4Model(eqx.Module):
         )
 
         inertial_h_lms = jnp.zeros(
-            (len(self.data.t_coorb), self.n_modes_extended), dtype=complex
+            (len(self.data.sur_time), self.n_modes_extended), dtype=complex
         )
 
         # Due to the varying number of nodes, there is no trivial way to vmap this
@@ -969,15 +969,15 @@ class NRSur7dq4Model(eqx.Module):
 
         # Sum along the N_modes axis with the spherical harmonics to generate strain as function of time
 
-        h_re_per_mode = self.interp_vmap(self.data.t_coorb, h_lms.real, time)
-        h_im_per_mode = self.interp_vmap(self.data.t_coorb, h_lms.imag, time)
+        h_re_per_mode = self.interp_vmap(self.data.sur_time, h_lms.real, time)
+        h_im_per_mode = self.interp_vmap(self.data.sur_time, h_lms.imag, time)
 
         # Interpolate real and imaginary parts to the requested time array
         h_re = jnp.sum(h_re_per_mode, axis=0)
         h_im = jnp.sum(h_im_per_mode, axis=0)
 
         # Mask to ensure output is zero outside the model's time range
-        mask = (time >= self.data.t_coorb[0]) * (time <= self.data.t_coorb[-1])
+        mask = (time >= self.data.sur_time[0]) * (time <= self.data.sur_time[-1])
         hp = jnp.where(mask, h_re, 0.0)
         hc = jnp.where(mask, -h_im, 0.0)
 

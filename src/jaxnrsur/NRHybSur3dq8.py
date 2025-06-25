@@ -194,7 +194,7 @@ class NRHybSur3dq8Model(eqx.Module):
             phi (float, optional): Azimuthal angle. Defaults to 0.0.
 
         """
-        return self.get_waveform(time, params, theta, phi)
+        return self.get_waveform_geometric(time, params, theta, phi)
 
     @property
     def n_modes(self) -> int:
@@ -263,7 +263,7 @@ class NRHybSur3dq8Model(eqx.Module):
         phase_interp = CubicSpline(self.data.sur_time, phase)(time)
         return amp_interp * jnp.exp(1j * phase_interp)
 
-    def get_waveform(
+    def get_waveform_geometric(
         self,
         time: Float[Array, " n_sample"],
         params: Float[Array, " n_dim"],
