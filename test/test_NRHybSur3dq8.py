@@ -24,10 +24,15 @@ def params():
     return jnp.array([0.9, 0.1, 0.1])
 
 
-def _check_waveform(h, shape):
-    assert h.shape == shape
-    assert jnp.iscomplexobj(h)
-    assert not jnp.isnan(h).any()
+def _check_waveform_tuple(h_tuple, shape):
+    assert isinstance(h_tuple, tuple) and len(h_tuple) == 2
+    hp, hc = h_tuple
+    assert hp.shape == shape
+    assert hc.shape == shape
+    assert jnp.issubdtype(hp.dtype, jnp.floating)
+    assert jnp.issubdtype(hc.dtype, jnp.floating)
+    assert not jnp.isnan(hp).any()
+    assert not jnp.isnan(hc).any()
 
 
 @pytest.mark.parametrize(
@@ -36,15 +41,15 @@ def _check_waveform(h, shape):
         (lambda m, t, p: m(t, p), (1000,)),  # basic
         (
             lambda m, t, p: eqx.filter_jit(
-                eqx.filter_vmap(m.get_waveform, in_axes=(None, 0))
-            )(t, jnp.repeat(p[None, :], 5, axis=0)),
+                eqx.filter_vmap(m.get_waveform_geometric, in_axes=(None, 0, None, None))
+            )(t, jnp.repeat(p[None, :], 5, axis=0), 0.0, 0.0),
             (5, 1000),
         ),  # jit+vmap
     ],
 )
 def test_waveform_variants(model, time, params, waveform_fn, param_shape):
-    h = waveform_fn(model, time, params)
-    _check_waveform(h, param_shape)
+    h_tuple = waveform_fn(model, time, params)
+    _check_waveform_tuple(h_tuple, param_shape)
 
 
 def test_model_initialization(model):
@@ -57,7 +62,8 @@ def test_model_initialization(model):
 def test_grad_waveform_time(model, time, params):
     # Gradient with respect to time
     def target(time_):
-        return jnp.sum(model(time_, params)).real
+        hp, hc = model(time_, params)
+        return jnp.sum(hp) + jnp.sum(hc)
 
     grad_time = jax.grad(target)
     grad_val = grad_time(time)
@@ -68,7 +74,8 @@ def test_grad_waveform_time(model, time, params):
 def test_grad_waveform_params(model, time, params):
     # Gradient with respect to params
     def target(params_):
-        return jnp.sum(model(time, params_)).real
+        hp, hc = model(time, params_)
+        return jnp.sum(hp) + jnp.sum(hc)
 
     grad_params = jax.grad(target)
     grad_val = grad_params(params)
