@@ -81,3 +81,7 @@ class TestNRSur7dq4:
                 f"Sample {i}: Max abs difference in hp:",
                 np.max(np.abs(h_ref[i] - inertial_h)),
             )
+            assert np.max(np.abs(h_ref[i] - inertial_h)) < 1e-4, (
+                f"Waveform mismatch for sample {i}: "
+                f"Max abs difference {np.max(np.abs(h_ref[i] - inertial_h))}"
+            )
