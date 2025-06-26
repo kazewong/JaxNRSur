@@ -729,7 +729,7 @@ class NRSur7dq4Model(WaveformModel):
             R_B_prime = jnp.where(R_B_small, jnp.zeros_like(R_B), R_B)
             result = jax.lax.select(
                 i2 * (ell_p == ell) * (m_p == -m),
-                R_B_prime ** (2.0 * m) * -(1 ** (ell + m - 1)),
+                R_B_prime ** (2.0 * m) * (-1) ** (ell + m - 1),
                 result,
             )
             result = jax.lax.select(
