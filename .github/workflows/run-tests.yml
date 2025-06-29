@@ -27,6 +27,9 @@ jobs:
       - name: Install the project
         run: uv sync --dev
 
+      - name: Pre-commit run
+        uses: pre-commit/action@v3.0.1
+
       - name: Run tests and coverage
         run: |
           uv run coverage run --source=src -m pytest test
