@@ -161,3 +161,4 @@ cython_debug/
 
 *.h5
 *.npz
+joss/jats

@@ -1,5 +1,5 @@
 [project]
-name = "jaxNRSur"
+name = "JaxNRSur"
 version = "0.1.0"
 description = "Numerical relativity surrogate model for gravitational waveforms in Jax"
 readme = "README.md"

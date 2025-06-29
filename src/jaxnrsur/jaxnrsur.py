@@ -101,7 +101,6 @@ class JaxNRSur:
         self,
         time: Float[Array, " n_sample"],
         params: Float[Array, " n_param"],
-        alpha_window: float = 0.1,
     ) -> tuple[Float[Array, " n_freq"], Float[Array, " n_freq"]]:
         """
         Get the waveform in the frequency domain.
