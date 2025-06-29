@@ -34,17 +34,16 @@ bibliography: paper.bib
 
 # Summary
 
-The detection and analysis of gravitational waves rely on accurate and efficient modeling of waveforms from compact binary coalescences. Numerical relativity (NR) surrogate models are a family of data-driven models that are directly trained on NR simulations to provide fast and accurate approximations of these waveforms without many assumptions about the form of the model.
+The detection and analysis of gravitational waves relies on accurate and efficient modeling of waveforms from compact binary coalescences. Numerical relativity (NR) surrogate models are a family of data-driven models that are directly trained on NR simulations to provide fast and accurate approximations of these waveforms without many assumptions about the form of the model.
 
 `JaxNRSur` is a Python library that implements NR waveform models in `JAX` [@jax2018github], a high-performance numerical computing library that supports automatic differentiation, just-in-time (JIT) compilation, and hardware acceleration (GPU/TPU). By using JAX, `JaxNRSur` provides the following key features:
 
 ## Key features
 
-- **Automatic differentiation:** Compute gradients of waveforms with respect to time, source parameters, or model parameters (i.e. the data in the surrogate model) automatically, enabling advanced inference techniques such as gradient-based sampling or optimization.
+- **Automatic differentiation:** Compute gradients of waveforms with respect to time, source parameters, or model parameters (i.e., the data in the surrogate model) automatically, enabling advanced inference techniques such as gradient-based sampling or optimization.
 - **Accelerator support:** The same code runs efficiently on CPUs, GPUs, and TPUs, with no user intervention required. This allows for fast waveform evaluations in large-scale analyses.
 - **Simple vectorization:** JAX's vectorization capabilities allow users to efficiently evaluate waveforms for multiple source parameters or times in parallel.
 - **Unified interface:** A consistent and user-friendly interface for accessing different NR surrogate models, making it easy to switch between models.
-
 
 `JaxNRSur` currently includes implementations of several NR surrogate models, including:
 
@@ -63,12 +62,6 @@ Gravitational wave astronomy requires the evaluation of millions of waveform tem
 - **Accelerator support:** The same code runs efficiently on CPUs, GPUs, and TPUs, with no user intervention required.
 - **Modern Python ecosystem:** Integration with JAX and Equinox allows users to leverage the latest advances in scientific computing and machine learning.
 - **Ease of use:** A black-box interface is provided for typical users, while advanced users can extend or customize models as needed.
-
-# Technical details
-
-Waveform models in `JaxNRSur` are implemented as Python classes, parameterized by time and source parameters. The package uses Equinox to manage model parameters and ensure compatibility with JAX transformations. Users can JIT-compile or vectorize waveform evaluations for large-scale analyses. Automatic differentiation enables gradient-based sampling or optimization for parameter estimation.
-
-Data required for the surrogate models is automatically downloaded from Zenodo and cached locally, ensuring reproducibility and ease of setup.
 
 # Acknowledgements
 
