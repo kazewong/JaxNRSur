@@ -40,7 +40,6 @@ class TestNRSur7dq4:
         self.model = NRSur7dq4Model()
         self.data = np.load("./test_data.npz")
 
-
     def test_gradient(self):
         def loss(params):
             hp, hc = self.model.get_waveform_geometric(
