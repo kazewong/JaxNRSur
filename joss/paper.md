@@ -1,5 +1,5 @@
 ---
-title: 'JaxNRSur - Numerical Relativity Surrogates in JAX'
+title: "JaxNRSur - Numerical Relativity Surrogates in JAX"
 tags:
   - Python
   - Gravitational Waves
@@ -9,7 +9,7 @@ tags:
 authors:
   - name: Kaze W. K. Wong
     orcid: 0000-0001-8432-7788
-    affiliation: 1 
+    affiliation: 1
   - name: Maximiliano Isi
     orcid: 0000-0001-8830-8672
     affiliation: 2
@@ -21,7 +21,7 @@ authors:
     affiliation: 4
 affiliations:
   - name: Data Science and AI institute, Johns Hopkins University, Baltimore, MD 21218, US
-    index: 1  
+    index: 1
   - name: Center for Computational Astrophysics, Flatiron Institute, New York, NY 10010, US
     index: 2
   - name: Department of Physics, California Institute of Technology, Pasadena, California 91125, USA
@@ -34,7 +34,7 @@ bibliography: paper.bib
 
 # Summary
 
-The detection and analysis of gravitational waves relies on accurate and
+The detection and analysis of gravitational waves rely on accurate and
 efficient modeling of waveforms from compact binary coalescences. Numerical
 relativity (NR) surrogate models are a family of data-driven models that are
 directly trained on NR simulations to provide fast and accurate approximations
@@ -57,9 +57,8 @@ features:
 including:
 
 - `NRHybSur3dq8`: A hybridized surrogate model for non-precessing binary black
-hole mergers [@Varma:2018mmi], valid for mass ratios up to 8. - `NRSur7dq4`: A
-surrogate model for precessing binary black hole mergers [@Varma:2019csw], valid
-for mass ratios up to 4.
+  hole mergers [@Varma:2018mmi], valid for mass ratios up to 8.
+- `NRSur7dq4`: A surrogate model for precessing binary black hole mergers [@Varma:2019csw], valid for mass ratios up to 4.
 
 We have validated our implementation against the original implementations of
 these models in `gwsurrogate` [@Field:2025isp] to ensure correctness and
@@ -71,10 +70,10 @@ easy to set up and use.
 
 The original implementations of NR surrogate models in `gwsurrogate`
 [@Field:2025isp] are mainly implemented in `numpy` and `scipy` with additional
-binding from `c`, whcih gives the package a reasonable performance. However,
+bindings from `c`, which gives the package reasonable performance. However,
 this implementation does not take advantage of more modern computing paradigms
 such as the use of accelerators (GPUs/TPUs) and automatic differentiation, which
-have been widely adopted in the machine learning and high performance computing
+have been widely adopted in the machine learning and high-performance computing
 communities. This presents a few challenges when using and developing NR
 surrogate models, and this package aims to address these challenges:
 
@@ -94,7 +93,7 @@ further compounded by the fact that `JAX` supports vectorization of functions
 that is accelerator-aware, providing the performance the NR surrogate model
 family needs for downstream tasks.
 
-[^1]: Benchmarking results on Google Colab may vary depending on the specific hardware and software environment that are provisioned.
+[^1]: Benchmarking results on Google Colab may vary depending on the specific hardware and software environment that is provisioned.
 
 <!-- How differentiability can be used -->
 
@@ -108,14 +107,13 @@ differentiation. This is useful for tasks such as template bank generation
 improvement in waveform evaluation throughput, being able to leverage gradient
 information often speeds up the convergence of these downstream tasks, which
 further improves the performance of a complete pipeline when compared to
-non-gradient-based counterparts. On top of performance gains, higher order
+non-gradient-based counterparts. On top of performance gains, higher-order
 derivatives such as Hessians can be used as a natural metric for understanding
 uncertainties in the pipeline and help in sensitivity analysis.
 
-
 <!-- Gradient on model parameters -->
 
-Finally, this package also supports differentiating against the model parameters
+Finally, this package also supports differentiating with respect to the model parameters
 in a fashion similar to how neural networks are trained. This allows users to
 fine-tune the model parameters to better fit their data [@Lam:2023oga]. Another
 research avenue our package opens is more flexible ways to incorporate
