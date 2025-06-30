@@ -8,6 +8,10 @@ Numerical relativity surrogate waveform in Jax
 <img src="https://badgen.net/badge/License/MIT/blue" alt="doc"/>
 </a>
 
+<a href='https://coveralls.io/github/kazewong/JaxNRSur?branch=main'>
+  <img src='https://coveralls.io/repos/github/kazewong/JaxNRSur/badge.svg?branch=main' alt='Coverage Status' />
+</a>
+
 # Quickstart
 
 ## Installation
@@ -82,6 +86,17 @@ h_multi = eqx.filter_jit(eqx.filter_vmap(model.get_waveform, in_axes=(None, 0)))
     time, params_multi
 )
 ```
+
+## Benchmark
+
+<!-- Add a notebook on google colab to show the benchmark. -->
+
+<a href="https://colab.research.google.com/drive/1A12tzSPdFBL_jzWYLfll4yB1H2iWRtoi?usp=sharing">
+<img alt="Static Badge" src="https://img.shields.io/badge/Colab-benchmark-orange?style=for-the-badge&logo=googlecolab">
+</a>
+
+
+
 
 ## Local data cache
 
