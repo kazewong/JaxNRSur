@@ -34,7 +34,9 @@ class DummyWaveformModel(WaveformModel):
 @pytest.fixture
 def jaxnrsur_instance():
     model = DummyWaveformModel()
-    jaxnrsur = JaxNRSur(model=model, alpha_window=0.1)
+    jaxnrsur = JaxNRSur(
+        model=model, alpha_window=0.1, segment_length=4.0, sampling_rate=4096
+    )
     return jaxnrsur
 
 
@@ -85,12 +87,12 @@ def test_get_waveform_td_windowing(jaxnrsur_instance):
 
 
 def test_get_waveform_fd_basic(jaxnrsur_instance):
-    time = jnp.linspace(0, 1, 128)
+    freqs = jnp.fft.rfftfreq(16384, 1.0 / 4096)  # Example frequency array
     params = jnp.array([30.0, 100.0, 0.5, 0.2])
-    hp_fd, hc_fd = jaxnrsur_instance.get_waveform_fd(time, params)
+    hp_fd, hc_fd = jaxnrsur_instance.get_waveform_fd(freqs, params)
     # Output should be half the length + 1 (rfft style)
-    assert hp_fd.shape[0] == 65
-    assert hc_fd.shape[0] == 65
+    assert hp_fd.shape[0] == freqs.shape[0]
+    assert hc_fd.shape[0] == freqs.shape[0]
     # Should be complex arrays
     assert jnp.iscomplexobj(hp_fd)
     assert jnp.iscomplexobj(hc_fd)

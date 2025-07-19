@@ -6,6 +6,8 @@ import jax.numpy as jnp
 from jaxtyping import Array, Float
 from jaxnrsur.DataLoader import DataLoader
 from abc import abstractmethod
+from typing import Optional
+import logging
 
 # geometric units to SI
 GMSUN_SI = 1.32712442099000e20
@@ -33,11 +35,35 @@ class WaveformModel:
 
 class JaxNRSur:
     model: WaveformModel
+    full_frequency: Float[Array, " n_freq"]
+    segment_length: Optional[float] = None
+    sampling_rate: Optional[int] = None
     alpha_window: float = 0.1
 
-    def __init__(self, model: WaveformModel, alpha_window: float = 0.1):
+    def __init__(
+        self,
+        model: WaveformModel,
+        segment_length: Optional[float] = None,
+        sampling_rate: Optional[int] = None,
+        alpha_window: float = 0.1,
+    ):
         self.model = model
         self.alpha_window = alpha_window
+
+        if segment_length is None or sampling_rate is None:
+            logging.warning(
+                "segment_length or sampling_rate is not set. "
+                "Waveform generation in frequency domain will not work as expected. "
+            )
+            self.full_frequency = jnp.array([])
+        else:
+            # create a full frequency array for the surrogate model
+            # this is used to compute the waveform in frequency domain
+            self.segment_length = segment_length
+            self.sampling_rate = sampling_rate
+            self.full_frequency = jnp.fft.rfftfreq(
+                int(segment_length * sampling_rate), 1.0 / sampling_rate
+            )
 
     def window_function(
         self,
@@ -102,17 +128,23 @@ class JaxNRSur:
 
     def get_waveform_fd(
         self,
-        time: Float[Array, " n_sample"],
+        frequency: Float[Array, " n_freq"],
         params: Float[Array, " n_param"],
     ) -> tuple[Float[Array, " n_freq"], Float[Array, " n_freq"]]:
         """
         Get the waveform in the frequency domain.
         """
-        # this could be moved inside get_waveform_td if
-        # we change the API to have seglen and delta_t as
-        # input, rather than time
-        # N = int(seglen/delta_t)
-        # time = jnp.arange(N)*delta_t - seglen + 2
+
+        # form time array with desired sampling rate and duration
+        assert (
+            self.segment_length is not None
+        ), "segment_length must be set for frequency domain waveform generation"
+        assert (
+            self.sampling_rate is not None
+        ), "sampling_rate must be set for frequency domain waveform generation"
+        N = int(self.segment_length * self.sampling_rate)
+        delta_t = 1.0 / self.sampling_rate
+        time = jnp.arange(N) * delta_t - self.segment_length + 2
 
         hp_td, hc_td = self.get_waveform_td(time, params)
 
@@ -127,4 +159,6 @@ class JaxNRSur:
         conj_h_fd_negative = jnp.conj(jnp.fft.ifftshift(h_fd))[:n][::-1]
         hp_fd = (h_fd_positive + conj_h_fd_negative) / 2
         hc_fd = 1j * (h_fd_positive - conj_h_fd_negative) / 2
-        return hp_fd, hc_fd
+
+        isin = jnp.isin(self.full_frequency, frequency)
+        return hp_fd[isin], hc_fd[isin]
