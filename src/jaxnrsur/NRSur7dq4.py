@@ -12,7 +12,7 @@ from jaxnrsur.PolyPredictor import (
     evaluate_ensemble_dynamics,
     make_polypredictor_ensemble,
 )
-from jaxnrsur.jaxnrsur import WaveformModel
+from jaxnrsur import WaveformModel
 from jaxtyping import Array, Float, Complex
 import equinox as eqx
 

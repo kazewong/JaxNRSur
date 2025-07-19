@@ -1,6 +1,6 @@
 import pytest
 import jax.numpy as jnp
-from jaxnrsur.jaxnrsur import JaxNRSur, WaveformModel, DataLoader, RSUN_SI, MPC_SI, C_SI
+from jaxnrsur import JaxNRSur, WaveformModel, DataLoader, RSUN_SI, MPC_SI, C_SI
 from jaxnrsur.NRSur7dq4 import NRSur7dq4Model
 from jaxnrsur.NRHybSur3dq8 import NRHybSur3dq8Model
 from jaxtyping import Float, Array

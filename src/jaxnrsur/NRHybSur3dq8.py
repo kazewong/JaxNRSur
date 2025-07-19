@@ -6,7 +6,7 @@ from jaxnrsur.DataLoader import load_data, h5Group_to_dict, h5_mode_tuple
 from jaxnrsur.Spline import CubicSpline
 from jaxnrsur.EIMPredictor import EIMpredictor
 from jaxnrsur.Harmonics import SpinWeightedSphericalHarmonics
-from jaxnrsur.jaxnrsur import WaveformModel
+from jaxnrsur import WaveformModel
 from jaxtyping import Array, Float, Int
 import equinox as eqx
 
