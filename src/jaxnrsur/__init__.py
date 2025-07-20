@@ -35,7 +35,7 @@ class WaveformModel:
 
 class JaxNRSur:
     model: WaveformModel
-    full_frequency: Float[Array, " n_freq"]
+    frequency: Float[Array, " n_freq"]
     segment_length: Optional[float] = None
     sampling_rate: Optional[int] = None
     alpha_window: float = 0.1
@@ -55,13 +55,13 @@ class JaxNRSur:
                 "segment_length or sampling_rate is not set. "
                 "Waveform generation in frequency domain will not work as expected. "
             )
-            self.full_frequency = jnp.array([])
+            self.frequency = jnp.array([])
         else:
             # create a full frequency array for the surrogate model
             # this is used to compute the waveform in frequency domain
             self.segment_length = segment_length
             self.sampling_rate = sampling_rate
-            self.full_frequency = jnp.fft.rfftfreq(
+            self.frequency = jnp.fft.rfftfreq(
                 int(segment_length * sampling_rate), 1.0 / sampling_rate
             )
 
@@ -128,7 +128,6 @@ class JaxNRSur:
 
     def get_waveform_fd(
         self,
-        frequency: Float[Array, " n_freq"],
         params: Float[Array, " n_param"],
     ) -> tuple[Float[Array, " n_freq"], Float[Array, " n_freq"]]:
         """
@@ -160,5 +159,4 @@ class JaxNRSur:
         hp_fd = (h_fd_positive + conj_h_fd_negative) / 2
         hc_fd = 1j * (h_fd_positive - conj_h_fd_negative) / 2
 
-        isin = jnp.isin(self.full_frequency, frequency)
-        return hp_fd[isin], hc_fd[isin]
+        return hp_fd, hc_fd
