@@ -27,8 +27,8 @@ class WaveformModel:
         self,
         time: Float[Array, " n_sample"],
         params: Float[Array, " n_param"],
-        theta: float,
-        phi: float,
+        theta: Float,
+        phi: Float,
     ) -> tuple[Float[Array, " n_sample"], Float[Array, " n_sample"]]:
         raise NotImplementedError
 
@@ -99,8 +99,6 @@ class JaxNRSur:
         self,
         time: Float[Array, " n_sample"],
         params: Float[Array, " n_param"],
-        theta: float = 0.0,
-        phi: float = 0.0,
     ) -> tuple[Float[Array, " n_sample"], Float[Array, " n_sample"]]:
         """
         Get the waveform in the time domain in SI units.
@@ -108,6 +106,8 @@ class JaxNRSur:
         # get scaling parameters
         mtot = params[0]
         dist_mpc = params[1]
+        theta = params[2]
+        phi = params[3]
 
         # form time array with desired sampling rate and duration
         # N = int(seglen*srate)
@@ -116,7 +116,7 @@ class JaxNRSur:
         # evaluate the surrogate over the equivalent geometric time
         time_m = time * C_SI / RSUN_SI / mtot
         hrM_p, hrM_c = self.model.get_waveform_geometric(
-            time_m, jnp.array(params[2:]), theta, phi
+            time_m, jnp.array(params[4:]), theta, phi
         )
 
         if self.alpha_window > 0:

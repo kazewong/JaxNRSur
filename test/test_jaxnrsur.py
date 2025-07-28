@@ -42,7 +42,7 @@ def jaxnrsur_instance():
 
 def test_get_waveform_td_basic(jaxnrsur_instance):
     time = jnp.linspace(0, 1, 100)
-    params = jnp.array([30.0, 100.0, 1.1, 0.5, 0.2])  # mtot, dist_mpc, q, chi_1z, chi_2z
+    params = jnp.array([30.0, 100.0, 0.3, 0.2, 1.1, 0.5, 0.2])  # mtot, dist_mpc, q, chi_1z, chi_2z
     hp, hc = jaxnrsur_instance.get_waveform_td(time, params)
     assert hp.shape == time.shape
     assert hc.shape == time.shape
@@ -79,7 +79,7 @@ def test_get_waveform_td_windowing(jaxnrsur_instance):
     # Test that windowing is applied (alpha_window > 0)
     jaxnrsur_instance.alpha_window = 0.2
     time = jnp.linspace(0, 1, 100)
-    params = jnp.array([30.0, 100.0, 1.1, 0.5, 0.2])
+    params = jnp.array([30.0, 100.0, 0.3, 0.2, 1.1, 0.5, 0.2])
     hp, hc = jaxnrsur_instance.get_waveform_td(time, params)
     # The start of the waveform should be zero due to windowing
     assert jnp.isclose(hp[0], 0.0, atol=1e-8)
@@ -88,7 +88,7 @@ def test_get_waveform_td_windowing(jaxnrsur_instance):
 
 def test_get_waveform_fd_basic(jaxnrsur_instance):
     freqs = jnp.fft.rfftfreq(16384, 1.0 / 4096)  # Example frequency array
-    params = jnp.array([30.0, 100.0, 1.1, 0.5, 0.2])
+    params = jnp.array([30.0, 100.0, 0.3, 0.2, 1.1, 0.5, 0.2])
     hp_fd, hc_fd = jaxnrsur_instance.get_waveform_fd(freqs, params)
     # Output should be half the length + 1 (rfft style)
     assert hp_fd.shape[0] == freqs.shape[0]
@@ -104,7 +104,7 @@ def test_nrsur7dq4model_waveform():
     # Just check that the model runs and returns arrays of correct shape
     time = jnp.linspace(0, 1, 100)
     params = jnp.array(
-        [30.0, 100.0, 3.0, 0.5, 0.0, 0.0, 0.0, 0.5, 0.0]
+        [30.0, 100.0, 0.3, 0.2, 3.0, 0.5, 0.0, 0.0, 0.0, 0.5, 0.0]
     )  # mtot, dist_mpc, chi1z, chi2z, theta1, phi1, theta2, phi2
     hp, hc = jaxnrsur.get_waveform_td(time, params)
     assert hp.shape == time.shape
@@ -116,7 +116,7 @@ def test_nrhybsur3dq8model_waveform():
     jaxnrsur = JaxNRSur(model=model, alpha_window=0.1)
     # Just check that the model runs and returns arrays of correct shape
     time = jnp.linspace(0, 1, 100)
-    params = jnp.array([30.0, 100.0, 0.9, 0.1, 0.1])  # mtot, dist_mpc, q, chi1z, chi2z
+    params = jnp.array([30.0, 100.0, 0.3, 0.2, 0.9, 0.1, 0.1])  # mtot, dist_mpc, q, chi1z, chi2z
     hp, hc = jaxnrsur.get_waveform_td(time, params)
     assert hp.shape == time.shape
     assert hc.shape == time.shape

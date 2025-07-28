@@ -950,8 +950,8 @@ class NRSur7dq4Model(WaveformModel):
         self,
         time: Float[Array, " n_sample"],
         params: Float[Array, " n_dim"],
-        theta: float = 0.0,
-        phi: float = 0.0,
+        theta: Float = 0.0,
+        phi: Float = 0.0,
         # quaternions
         init_quat: Float[Array, " n_quat"] = jnp.array([1.0, 0.0, 0.0, 0.0]),
         init_orb_phase: float = 0.0,

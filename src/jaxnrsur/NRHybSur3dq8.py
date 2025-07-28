@@ -268,8 +268,8 @@ class NRHybSur3dq8Model(WaveformModel):
         self,
         time: Float[Array, " n_sample"],
         params: Float[Array, " n_dim"],
-        theta: float = 0.0,
-        phi: float = 0.0,
+        theta: Float = 0.0,
+        phi: Float = 0.0,
     ) -> tuple[Float[Array, " n_sample"], Float[Array, " n_sample"]]:
         """
         Current implementation sepearates the 22 mode from the rest of the modes,
