@@ -91,7 +91,7 @@ def test_get_waveform_td_windowing(jaxnrsur_instance):
 def test_get_waveform_fd_basic(jaxnrsur_instance):
     freqs = jnp.fft.rfftfreq(16384, 1.0 / 4096)  # Example frequency array
     params = jnp.array([30.0, 100.0, 0.3, 0.2, 1.1, 0.5, 0.2])
-    hp_fd, hc_fd = jaxnrsur_instance.get_waveform_fd(freqs, params)
+    hp_fd, hc_fd = jaxnrsur_instance.get_waveform_fd(params)
     # Output should be half the length + 1 (rfft style)
     assert hp_fd.shape[0] == freqs.shape[0]
     assert hc_fd.shape[0] == freqs.shape[0]
