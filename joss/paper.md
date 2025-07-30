@@ -57,8 +57,8 @@ features:
 including:
 
 - `NRHybSur3dq8`: A hybridized surrogate model for non-precessing binary black
-  hole mergers [@Varma:2018mmi], valid for mass ratios up to 8.
-- `NRSur7dq4`: A surrogate model for precessing binary black hole mergers [@Varma:2019csw], valid for mass ratios up to 4.
+  hole mergers [@Varma:2018mmi], trained on mass ratios up to 8.
+- `NRSur7dq4`: A surrogate model for precessing binary black hole mergers [@Varma:2019csw], trained on mass ratios up to 4.
 
 We have validated our implementation against the original implementations of
 these models in `gwsurrogate` [@Field:2025isp] to ensure correctness and
