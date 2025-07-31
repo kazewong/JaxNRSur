@@ -7,6 +7,7 @@ from jaxtyping import Array, Float
 from jaxnrsur.DataLoader import DataLoader
 from abc import abstractmethod
 from typing import Optional
+import equinox as eqx
 import logging
 
 # geometric units to SI
@@ -19,7 +20,7 @@ PC_SI = 3.08567758149136720000e16
 MPC_SI = 1e6 * PC_SI
 
 
-class WaveformModel:
+class WaveformModel(eqx.Module):
     data: DataLoader
 
     @abstractmethod

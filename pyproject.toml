@@ -20,6 +20,7 @@ dependencies = [
     "h5py>=3.13.0",
     "jax>=0.6.0",
     "lineax>=0.0.8",
+    "optax>=0.2.5",
     "requests>=2.32.3",
 ]
 
