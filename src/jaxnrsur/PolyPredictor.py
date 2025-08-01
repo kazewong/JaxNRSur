@@ -96,7 +96,7 @@ class PolyPredictor(eqx.Module):
         return jnp.dot(
             coefs,
             jnp.prod(
-                stable_power(inputs, bfOrders),
+                stable_power(inputs, jax.lax.stop_gradient(bfOrders)),
                 axis=1,
             ),
         )
