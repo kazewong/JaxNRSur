@@ -12,6 +12,17 @@ import equinox as eqx
 
 
 def get_T3_phase(q: float, t: Float[Array, " n"], t_ref: float = 1000.0) -> float:
+    """
+    Compute the T3 phase correction for the waveform model.
+
+    Args:
+        q (float): Mass ratio.
+        t (Float[Array, " n"]): Time array.
+        t_ref (float, optional): Reference time. Defaults to 1000.0.
+
+    Returns:
+        float: T3 phase correction value.
+    """
     eta = q / (1 + q) ** 2
     theta_raw = (eta * (t_ref - t) / 5) ** (-1.0 / 8)
     theta_cal = (eta * (t_ref + 1000) / 5) ** (-1.0 / 8)
@@ -38,6 +49,12 @@ class NRHybSur3dq8DataLoader(eqx.Module):
             (5, 5),
         ],
     ) -> None:
+        """
+        Initialize the NRHybSur3dq8DataLoader.
+
+        Args:
+            modelist (list[tuple[int, int]], optional): List of mode tuples to load.
+        """
         data = load_data(
             "https://zenodo.org/records/3348115/files/NRHybSur3dq8.h5?download=1",
             "NRHybSur3dq8.h5",
@@ -49,6 +66,18 @@ class NRHybSur3dq8DataLoader(eqx.Module):
             self.modes.append(self.read_single_mode(data, modelist[i]))
 
     def read_function(self, node_data: h5py.Group) -> dict:
+        """
+        Read a function group from the HDF5 node data and construct the EIM predictors.
+
+        Args:
+            node_data (h5py.Group): HDF5 group containing node function data.
+
+        Returns:
+            dict: Dictionary containing predictors, EIM basis, and metadata.
+
+        Raises:
+            ValueError: If required data is missing or incorrectly formatted.
+        """
         try:
             result = {}
             if isinstance(node_data["n_nodes"], h5py.Dataset):
@@ -83,6 +112,16 @@ class NRHybSur3dq8DataLoader(eqx.Module):
 
     @staticmethod
     def make_empty_function(name: str, length: int) -> dict:
+        """
+        Create an empty function dictionary for a mode component.
+
+        Args:
+            name (str): Name of the function ('re' or 'im').
+            length (int): Length of the EIM basis.
+
+        Returns:
+            dict: Dictionary representing an empty function.
+        """
         return {
             "n_nodes": 1,
             "predictors": [lambda x: 1],
@@ -91,6 +130,16 @@ class NRHybSur3dq8DataLoader(eqx.Module):
         }
 
     def read_single_mode(self, file: h5py.File, mode: tuple[int, int]) -> dict:
+        """
+        Read a single mode's data from the HDF5 file.
+
+        Args:
+            file (h5py.File): HDF5 file object.
+            mode (tuple[int, int]): Mode tuple (l, m).
+
+        Returns:
+            dict: Dictionary containing mode data.
+        """
         result = {}
         data = file["sur_subs/%s/func_subs" % (h5_mode_tuple[mode])]
         assert isinstance(data, h5py.Group), "Mode data is not a group"
@@ -144,6 +193,7 @@ class NRHybSur3dq8Model(WaveformModel):
     ):
         """
         Initialize NRHybSur3dq8Model.
+
         The model is described in the paper:
         https://journals.aps.org/prd/abstract/10.1103/PhysRevD.99.064045
 
@@ -186,7 +236,7 @@ class NRHybSur3dq8Model(WaveformModel):
         phi: float = 0.0,
     ) -> tuple[Float[Array, " n_sample"], Float[Array, " n_sample"]]:
         """
-        Alias for get_waveform.
+        Compute the waveform for given time and source parameters.
 
         Args:
             time (Float[Array, " n_sample"]): Time grid.
@@ -194,13 +244,18 @@ class NRHybSur3dq8Model(WaveformModel):
             theta (float, optional): Polar angle. Defaults to 0.0.
             phi (float, optional): Azimuthal angle. Defaults to 0.0.
 
+        Returns:
+            tuple: Plus and cross polarizations of the waveform.
         """
         return self.get_waveform_geometric(time, params, theta, phi)
 
     @property
     def n_modes(self) -> int:
         """
-        Number of modes in the model.
+        Get the number of modes in the model.
+
+        Returns:
+            int: Number of modes.
         """
         return len(self.data.modes)
 
@@ -212,8 +267,11 @@ class NRHybSur3dq8Model(WaveformModel):
         Construct the EIM basis given the source parameters.
 
         Args:
-            eim_dict (dict): EIM dictionary.
+            eim_dict (dict): EIM dictionary containing predictors and basis.
             params (Float[Array, " n_dim"]): Source parameters.
+
+        Returns:
+            Float[Array, " n_sample"]: EIM basis evaluated at parameters.
         """
         result = jnp.zeros((eim_dict["n_nodes"], 1))
         for i in range(eim_dict["n_nodes"]):
@@ -224,6 +282,16 @@ class NRHybSur3dq8Model(WaveformModel):
     def get_real_imag(
         mode: dict, params: Float[Array, " n_dim"]
     ) -> tuple[Float[Array, " n_sample"], Float[Array, " n_sample"]]:
+        """
+        Get the real and imaginary parts for a mode given parameters.
+
+        Args:
+            mode (dict): Mode dictionary containing 'real' and 'imag' EIM data.
+            params (Float[Array, " n_dim"]): Source parameters.
+
+        Returns:
+            tuple: Real and imaginary parts as arrays.
+        """
         params = params[None]
         real = NRHybSur3dq8Model.get_eim(mode["real"], params)
         imag = NRHybSur3dq8Model.get_eim(mode["imag"], params)
@@ -233,6 +301,16 @@ class NRHybSur3dq8Model(WaveformModel):
     def get_multi_real_imag(
         modes: list[dict], params: Float[Array, " n_dim"]
     ) -> tuple[list[Float[Array, " n_sample"]], list[Float[Array, " n_sample"]]]:
+        """
+        Get real and imaginary parts for multiple modes.
+
+        Args:
+            modes (list[dict]): List of mode dictionaries.
+            params (Float[Array, " n_dim"]): Source parameters.
+
+        Returns:
+            tuple: Lists of real and imaginary arrays for each mode.
+        """
         return jax.tree_util.tree_map(
             lambda mode: __class__.get_real_imag(mode, params),
             modes,
@@ -245,6 +323,17 @@ class NRHybSur3dq8Model(WaveformModel):
         imag: Float[Array, " n_sample"],
         time: Float[Array, " n_time"],
     ) -> Float[Array, " n_sample"]:
+        """
+        Interpolate real and imaginary mode data to the given time grid.
+
+        Args:
+            real (Float[Array, " n_sample"]): Real part of mode.
+            imag (Float[Array, " n_sample"]): Imaginary part of mode.
+            time (Float[Array, " n_time"]): Time grid.
+
+        Returns:
+            Float[Array, " n_sample"]: Complex mode data at requested times.
+        """
         return CubicSpline(self.data.sur_time, real)(time) + 1j * CubicSpline(
             self.data.sur_time, imag
         )(time)
@@ -254,6 +343,16 @@ class NRHybSur3dq8Model(WaveformModel):
         time: Float[Array, " n_samples"],
         params: Float[Array, " n_dim"],
     ) -> Float[Array, " n_sample"]:
+        """
+        Compute the (2,2) mode for the waveform.
+
+        Args:
+            time (Float[Array, " n_samples"]): Time grid.
+            params (Float[Array, " n_dim"]): Source parameters.
+
+        Returns:
+            Float[Array, " n_sample"]: Complex (2,2) mode data.
+        """
         # 22 mode has weird dict that making a specical function is easier.
         q = params[0]
         params = params[None]
@@ -272,11 +371,20 @@ class NRHybSur3dq8Model(WaveformModel):
         phi: Float = 0.0,
     ) -> tuple[Float[Array, " n_sample"], Float[Array, " n_sample"]]:
         """
-        Current implementation sepearates the 22 mode from the rest of the modes,
-        because of the data strucutre and how they are combined.
-        This means the CubicSpline is called in a loop,
-        which is not ideal (double the run time).
-        We should merge the datastructure to make this more efficient.
+        Compute the geometric waveform (plus and cross polarizations) for given parameters.
+
+        Current implementation separates the 22 mode from the rest of the modes,
+        due to data structure and combination method. This means CubicSpline is called in a loop,
+        which is not ideal (double the run time). The data structure could be merged for efficiency.
+
+        Args:
+            time (Float[Array, " n_sample"]): Time grid.
+            params (Float[Array, " n_dim"]): Source parameters.
+            theta (Float, optional): Polar angle. Defaults to 0.0.
+            phi (Float, optional): Azimuthal angle. Defaults to 0.0.
+
+        Returns:
+            tuple: Plus and cross polarizations of the waveform.
         """
         coeff = jnp.stack(jnp.array(self.get_multi_real_imag(self.mode_no22, params)))
         modes = eqx.filter_vmap(self.get_mode, in_axes=(0, 0, None))(

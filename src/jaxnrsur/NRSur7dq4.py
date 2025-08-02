@@ -169,11 +169,6 @@ class NRSur7dq4DataLoader(DataLoader):
         predictor_parameters_new, n_max = eqx.partition(predictor, eqx.is_array)
         self.rk4_predictor = predictor_parameters_new
 
-        # TODO: Initialize ab4_polypredictor
-
-        # integral timestepper
-        # scan expect a function and initial stata, plus the data
-        # Building the new predictor with the first 6 timesteps cut off
         ab4_coefs = predictors_parameters.coefs
         ab4_bfOrders = predictors_parameters.bfOrders
 
@@ -198,6 +193,20 @@ class NRSur7dq4DataLoader(DataLoader):
         self.ab4_predictor = predictor_parameters_ab4
 
     def read_mode_function(self, node_data: dict, n_max: int) -> NRSur7dq4ModeFunction:
+        """
+        Constructs an NRSur7dq4ModeFunction instance from node data.
+
+        Args:
+            node_data (dict): Dictionary containing node modeler coefficients, basis functions, and node indices.
+                Expected keys:
+                    - "nodeModelers": dict with keys "coefs_{i}" and "bfOrders_{i}" for each node index i.
+                    - "EIBasis": array of basis functions for EIM.
+                    - "nodeIndices": array of node indices.
+            n_max (int): Maximum number of basis functions to pad coefficients and orders to.
+
+        Returns:
+            NRSur7dq4ModeFunction: An instance containing predictors, EIM basis, and node indices for the mode.
+        """
         n_nodes = len(node_data["nodeIndices"])
 
         coefs = []
@@ -224,6 +233,17 @@ class NRSur7dq4DataLoader(DataLoader):
     def read_single_mode(
         self, file: dict, mode: tuple[int, int], n_max: int
     ) -> NRSur7dq4Mode:
+        """
+        Reads a single mode from the provided data dictionary and constructs an NRSur7dq4Mode object.
+
+        Args:
+            file (dict): Dictionary containing the data for all modes.
+            mode (tuple[int, int]): The mode tuple (l, m) to read.
+            n_max (int): Maximum number of basis functions to pad coefficients and orders to.
+
+        Returns:
+            NRSur7dq4Mode: An object containing the mode functions for the specified mode.
+        """
         if mode[1] > 0:
             real_plus = self.read_mode_function(
                 file[f"hCoorb_{mode[0]}_{mode[1]}_Re+"], n_max
@@ -241,10 +261,6 @@ class NRSur7dq4DataLoader(DataLoader):
             real_plus = self.read_mode_function(
                 file[f"hCoorb_{mode[0]}_{mode[1]}_real"], n_max
             )
-            # result['real_minus'] = 0
-            # TODO Make the structure of the m=0 modes similar
-            # to hangle in the same way as m != 0
-
             imag_plus = self.read_mode_function(
                 file[f"hCoorb_{mode[0]}_{mode[1]}_imag"], n_max
             )
@@ -269,6 +285,21 @@ class NRSur7dq4DataLoader(DataLoader):
         )
 
     def read_coorb(self, file: dict, n_max: int) -> PolyPredictor:
+        """
+        Reads polypredictor coefficients and basis orders from the co-orbital waveform data.
+
+        Parameters
+        ----------
+        file : dict
+            Dictionary containing co-orbital waveform data, organized by data segment nodes and tags.
+        n_max : int
+            Maximum number of coefficients/order to pad/truncate each tag's data.
+
+        Returns
+        -------
+        PolyPredictor
+            An ensemble of polynomial predictors constructed from the processed coefficients and basis orders.
+        """
         result = []
 
         tags = [
@@ -340,6 +371,14 @@ class NRSur7dq4Model(WaveformModel):
             (4, 4),
         ],
     ):
+        """
+        Initialize the NRSur7dq4 model.
+        
+        Args:
+            modelist (list[tuple[int, int]], optional): List of modes to include in the model.
+                Defaults to [(2, 0), (2, 1), (2, 2), (3, 0), (3, 1),
+                (3, 2), (3, 3), (4, 0), (4, 1), (4, 2), (4, 3), (4, 4)].
+        """
         self.data = NRSur7dq4DataLoader(modelist=modelist)  # type: ignore
         self.harmonics = []
 
@@ -379,6 +418,22 @@ class NRSur7dq4Model(WaveformModel):
         init_quat: Float[Array, " n_quat"] = jnp.array([1.0, 0.0, 0.0, 0.0]),
         init_orb_phase: float = 0.0,
     ) -> tuple[Float[Array, " n_sample"], Float[Array, " n_sample"]]:
+        """
+        Generate the waveform for the NRSur7dq4 model.
+        This is a wrapper around the get_waveform_geometric method.
+        
+        Args:
+            time (Float[Array, " n_sample"]): Time array for the waveform.
+            params (Float[Array, " n_dim"]): Parameters for the waveform.
+            theta (float, optional): Polar angle. Defaults to 0.0.
+            phi (float, optional): Azimuthal angle. Defaults to 0.0.
+            init_quat (Float[Array, " n_quat"], optional): Initial quaternion. Defaults to [1.0, 0.0, 0.0, 0.0].
+            init_orb_phase (float, optional): Initial orbital phase. Defaults to 0.0.
+            
+        Returns:
+            tuple[Float[Array, " n_sample"], Float[Array, " n_sample"]]:
+                The waveform in the form of (h_plus, h_cross).
+        """
         return self.get_waveform_geometric(
             time, params, theta, phi, init_quat, init_orb_phase
         )
@@ -386,6 +441,16 @@ class NRSur7dq4Model(WaveformModel):
     def _get_coorb_params(
         self, q: Float, Omega: Float[Array, " n_Omega"]
     ) -> Float[Array, " n_dim"]:
+        """
+        Given the mass ratio and dynamic parameters such as spins, compute the coorbital parameters.
+        
+        Args:
+            q (Float): Mass ratio of the binary system.
+            Omega (Float[Array, " n_Omega"]): Dynamic parameters including spins and orbital phase.
+            
+        Returns:
+            Float[Array, " n_dim"]: Coorbital parameters in the coorbital frame.
+        """
         # First construct array for coorbital frame
         # borrowing notation from gwsurrogate
 
@@ -407,6 +472,16 @@ class NRSur7dq4Model(WaveformModel):
         return coorb_x
 
     def _get_fit_params(self, params: Float[Array, " n_dim"]) -> Float[Array, " n_dim"]:
+        """
+        Transform the coorbital parameters into the fitting parameters used in the NRSur7dq4 model.
+        
+        Args:
+            params (Float[Array, " n_dim"]): coorbital parameters including mass ratio, spins, and orbital phase.
+            
+        Returns:
+            Float[Array, " n_dim"]: Fitting parameters for the NRSur7dq4 model.
+        """
+        
         # Generate fit params
         fit_params = jnp.zeros(params.shape)
 
@@ -438,6 +513,17 @@ class NRSur7dq4Model(WaveformModel):
         q: Float,
         predictor: PolyPredictor,
     ) -> Float[Array, " n_Omega"]:
+        """
+        Get the derivative of the dynamic parameters Omega_i with respect to the coorbital time, which has a shape ~200.
+        
+        Args:
+            Omega_i (Float[Array, " n_Omega"]): Dynamic parameters including spins and orbital phase.
+            q (Float): Mass ratio of the binary system.
+            predictor (PolyPredictor): The polynomial predictor for the mode.
+            
+        Returns:
+            Float[Array, " n_Omega"]: The derivative of the dynamic parameters Omega_i with respect to the coorbital time.
+        """
         coorb_x = self._get_coorb_params(q, Omega_i)
         fit_params = self._get_fit_params(coorb_x)
 
@@ -497,6 +583,20 @@ class NRSur7dq4Model(WaveformModel):
         predictor,
         dt: Float[Array, " 4"],
     ) -> tuple[Float[Array, " n_Omega"], Float[Array, " n_Omega"]]:
+        """
+        Adaptive 4th order Adams-Bashforth method for updating the dynamic parameters Omega_i4 for one step.
+        
+        Args:
+            q (Float): Mass ratio of the binary system.
+            Omega_i4 (Float[Array, " 4 n_Omega"]): Previous four dynamic parameters.
+            k_ab4 (Float[Array, " 3 n_Omega"]): Previous three derivatives of the dynamic parameters.
+            predictor (PolyPredictor): The polynomial predictor for the mode.
+            dt (Float[Array, " 4"]): Time step sizes for the four previous steps.
+            
+        Returns:
+            tuple[Float[Array, " n_Omega"], Float[Array, " n_Omega"]]:
+                The updated dynamic parameters and their derivative.
+        """
         dOmega_dt = self.get_Omega_derivative(Omega_i4[-1], q, predictor)
 
         # Using the timestep variable AB4 from gwsurrogate
@@ -545,6 +645,19 @@ class NRSur7dq4Model(WaveformModel):
         predictors,
         dt: Float,
     ) -> tuple[Float[Array, " n_Omega"], Float[Array, " n_Omega"]]:
+        """
+        Runge-Kutta 4th order method for updating the dynamic parameters Omega for one step.
+        
+        Args:
+            q (Float): Mass ratio of the binary system.
+            Omega (Float[Array, " n_Omega"]): Current dynamic parameters.
+            predictors (PolyPredictor): The polynomial predictor for the mode.
+            dt (Float): Time step size for the RK4 method.
+            
+        Returns:
+            tuple[Float[Array, " n_Omega"], Float[Array, " n_Omega"]]:
+                The updated dynamic parameters and their derivative.
+        """
         predictor_parameters, n_max = eqx.partition(predictors, eqx.is_array)
 
         def get_RK4_Omega_derivatives(
@@ -583,6 +696,17 @@ class NRSur7dq4Model(WaveformModel):
     def normalize_Omega(
         self, Omega: Float[Array, " n_Omega"], normA: float, normB: float
     ) -> Float[Array, " n_Omega"]:
+        """
+        Normalize the Omega parameters to ensure they are unit vectors in the coorbital frame.
+        
+        Args:
+            Omega (Float[Array, " n_Omega"]): Dynamic parameters including spins and orbital phase.
+            normA (float): Normalization factor for the A spin components.
+            normB (float): Normalization factor for the B spin components.
+            
+        Returns:
+            Float[Array, " n_Omega"]: Normalized dynamic parameters in the coorbital frame.
+        """
         Omega_normed = jnp.zeros(len(Omega))
 
         nOmega = jnp.linalg.norm(Omega[:4])
@@ -603,9 +727,38 @@ class NRSur7dq4Model(WaveformModel):
         predictor: PolyPredictor,
         eim_basis: Float[Array, " n_nodes n_sample"],
     ) -> Float[Array, " n_sample"]:
+        """
+        Evaluates the PolyPredictor ensemble and constructs the h_lm waveform
+        using the fitting parameters and EIM basis functions.
+        
+        Args:
+            lambdas (Float[Array, " n_dim"]): Fitting parameters for the mode
+            predictor (PolyPredictor): The polynomial predictor for the mode.
+            eim_basis (Float[Array, " n_nodes n_sample"]): EIM basis
+            functions for the mode.
+            
+        Returns:
+            Float[Array, " n_sample"]: The h_lm waveform for the mode.
+        """
         return jnp.dot(evaluate_ensemble(predictor, lambdas), eim_basis)
 
-    def get_coorb_hlm(self, lambdas, idx: int):
+    def get_coorb_hlm(self, lambdas: Float[Array, " n_node n_Omega"], idx: int)-> tuple[
+        Float[Array, " n_sample"], Float[Array, " n_sample"]
+    ]:
+        """
+        Constructs the h_lm in the coorbital frame for a parameter set and a mode index.
+        Note that lambdas has to be the output of a vmapped version of 
+        _get_fit_params.
+        
+        Args:
+            lambdas (Float[Array, " n_node n_Omega"]): Fitting parameters for the mode.
+            idx (int): Index of the mode to construct the h_lm for.
+            
+        Returns:
+            tuple[Float[Array, " n_sample"], Float[Array, " n_sample"]:
+                The h_lm waveform in the coorbital frame, represented as
+                (h_lm_plus, h_lm_minus).
+        """
         # surrogate is built on the symmetric (sum) and antisymmetric (diff)
         # combinations of the +|m| and -|m| modes
         # (although they are confusingly labeled "plus" and "minus" in
@@ -653,10 +806,32 @@ class NRSur7dq4Model(WaveformModel):
         data: Float[Array, " n_grid n_data"],
         time_interp: Float[Array, " n_sample"],
     ) -> Float[Array, " n_sample n_data"]:
+        """
+        Interpolates data on a time grid to a new time grid using cubic spline interpolation.
+        
+        Args:
+            time_grid (Float[Array, " n_grid"]): The original time grid.
+            data (Float[Array, " n_grid n_data"]): The data to interpolate.
+            time_interp (Float[Array, " n_sample"]): The new time grid for interpolation.
+            
+        Returns:
+            Float[Array, " n_sample n_data"]: The interpolated data on the new time
+        """
         return CubicSpline(time_grid, data)(time_interp)
 
     @staticmethod
-    def multiply_quats(q1, q2):
+    def multiply_quats(q1: Float[Array, " n_quat 4"],
+                       q2: Float[Array, " n_quat 4"]) -> Float[Array, " n_quat 4"]:
+        """
+        Multiplies two quaternions q1 and q2.
+        
+        Args:
+            q1 (Float[Array, " n_quat 4"]): First quaternion.
+            q2 (Float[Array, " n_quat 4"]): Second quaternion.
+            
+        Returns:
+            Float[Array, " n_quat 4"]: The product of the two quaternions.
+        """
         return jnp.array(
             [
                 q1[:, 0] * q2[:, 0]
@@ -684,6 +859,17 @@ class NRSur7dq4Model(WaveformModel):
         orbphase: Float[Array, " n_sample"],
         mode: tuple,
     ) -> Float[Array, " n_modes n_sample"]:
+        """
+        Compute the Wigner D coefficients for the given quaternion, orbital phase, and mode.
+        
+        Args:
+            quat (Float[Array, " n_quat n_sample"]): Quaternion representing the orientation
+            orbphase (Float[Array, " n_sample"]): Orbital phase of the system.
+            mode (tuple): The mode tuple (l, m) for which to compute the coefficients.
+            
+        Returns:
+            Float[Array, " n_modes n_sample"]: The Wigner D coefficients for the specified mode.
+        """
         # First rotate the quaternion as well
         quat_rot = jnp.array(
             [
@@ -805,6 +991,20 @@ class NRSur7dq4Model(WaveformModel):
         orbphase: Float[Array, " n_sample"],
         mode: tuple[int, int],
     ) -> Float[Array, "n_modes n_sample"]:
+        """
+        Multiply the Wigner D coefficients with the hlm_plus and hlm_minus
+        coefficients to get the mode projection.
+        
+        Args:
+            hlm_plus (Float[Array, " n_sample"]): The plus mode coefficients.
+            hlm_minus (Float[Array, " n_sample"]): The minus mode coefficients.
+            quat (Float[Array, " n_quat n_sample"]): Quaternion representing the orientation.
+            orbphase (Float[Array, " n_sample"]): Orbital phase of the system.
+            mode (tuple[int, int]): The mode tuple (l, m) for which to compute the projection.
+            
+        Returns:
+            Float[Array, "n_modes n_sample"]: The projected waveform.
+        """
         # Get the Wigner D coefficients
         return (self.wigner_d_coefficients(quat, orbphase, mode).T * hlm_plus).T + (
             self.wigner_d_coefficients(quat, orbphase, (mode[0], -mode[1])).T
@@ -820,6 +1020,21 @@ class NRSur7dq4Model(WaveformModel):
         init_quat: Float[Array, " n_quat"] = jnp.array([1.0, 0.0, 0.0, 0.0]),
         init_orb_phase: float = 0.0,
     ) -> Complex[Array, "n_mode n_sample"]:
+        """
+        Generate all the waveform modes invidiually in the inertial frame.
+        
+        Args:
+            params (Float[Array, " n_dim"]): Parameters for the waveform. The ordering is:
+                [q, spin_1_x, spin_1_y, spin_1_z,
+                    spin_2_x, spin_2_y, spin_2_z]
+            theta (float, optional): Polar angle. Defaults to 0.0.
+            phi (float, optional): Azimuthal angle. Defaults to 0.0.
+            init_quat (Float[Array, " n_quat"], optional): Initial quaternion. Defaults to [1.0, 0.0, 0.0, 0.0].
+            init_orb_phase (float, optional): Initial orbital phase. Defaults to 0.0.
+            
+        Returns:
+            Complex[Array, "n_mode n_sample"]: The waveform in the inertial frame, per mode.
+        """
         # Initialize Omega with structure:
         # Omega = [Quaterion, Orb phase, spin_1, spin_2]
         # Note that the spins are in the coprecessing frame
@@ -957,7 +1172,22 @@ class NRSur7dq4Model(WaveformModel):
         init_orb_phase: float = 0.0,
     ) -> tuple[Float[Array, " n_sample"], Float[Array, " n_sample"]]:
         """
-        Get the waveform in geometric units (h*r/M).
+        Get the combined waveform in the inertial frame for a given time array.
+        
+        Args:
+            time (Float[Array, " n_sample"]): Time array for which to compute the waveform.
+            params (Float[Array, " n_dim"]): Parameters for the waveform. The ordering is:
+                [q, spin_1_x, spin_1_y, spin_1_z,
+                    spin_2_x, spin_2_y, spin_2_z]
+            theta (float, optional): Polar angle. Defaults to 0.0.
+            phi (float, optional): Azimuthal angle. Defaults to 0.0.
+            init_quat (Float[Array, " n_quat"], optional): Initial quaternion.
+            Defaults to [1.0, 0.0, 0.0, 0.0].
+            init_orb_phase (float, optional): Initial orbital phase. Defaults to 0.
+        
+        Returns:
+            tuple[Float[Array, " n_sample"], Float[Array, " n_sample"]
+                The plus and cross polarizations of the waveform in the inertial frame.
         """
         # Get the inertial frame waveform and Omega_interp
         h_lms = self.get_waveform_inertial_permode(
