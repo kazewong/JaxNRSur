@@ -109,11 +109,15 @@ h_multi = eqx.filter_jit(eqx.filter_vmap(model.get_waveform, in_axes=(None, 0)))
 )
 ```
 
+## Tutorial notebooks
+
+Considering this package to be fairly lightweight, we think the combination of docstrings and notebook should suffice as documentations. You can find some examples for using the package in the `example` directory. Please open an issue (or better, a PR!) if you think there are extra use cases that could benefit from more documentation.
+
 ## Benchmark
 
 <!-- Add a notebook on google colab to show the benchmark. -->
 
-This is a benchmarking notebook hosted on Google Colab for people who want to try 
+This is a benchmarking notebook hosted on Google Colab for people who want to try using `JaxNRSur` with a GPU. Note that the performance of the waveform on Colab depends on the provisioning of the machine, which is out of our control. In general, if you get a T4 GPU on colab, the run time should be somewhere around 60ms for 100 evaluation as parameterized and shown on the notebook.
 
 <a href="https://colab.research.google.com/drive/1A12tzSPdFBL_jzWYLfll4yB1H2iWRtoi?usp=sharing">
 <img alt="Static Badge" src="https://img.shields.io/badge/Colab-benchmark-orange?style=for-the-badge&logo=googlecolab">
