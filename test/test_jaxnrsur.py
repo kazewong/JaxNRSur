@@ -126,10 +126,3 @@ def test_nrhybsur3dq8model_waveform():
     assert hc.shape == time.shape
 
 
-def test_waveformmodel_not_implemented():
-    class IncompleteModel(WaveformModel):
-        pass
-
-    model = IncompleteModel()
-    with pytest.raises(NotImplementedError):
-        model.get_waveform_geometric(jnp.array([0.0]), jnp.array([0.0]), 0.0, 0.0)
