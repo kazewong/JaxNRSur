@@ -124,5 +124,3 @@ def test_nrhybsur3dq8model_waveform():
     hp, hc = jaxnrsur.get_waveform_td(time, params)
     assert hp.shape == time.shape
     assert hc.shape == time.shape
-
-
