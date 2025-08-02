@@ -16,11 +16,19 @@ Numerical relativity surrogate waveform in Jax
 
 ## Installation
 
-The recommended way to install `jaxNRSur` is via `uv`. `uv` is a python package and project manager that takes inspiration and is written in `rust`. You can find the installation instructions [here](https://docs.astral.sh/uv/getting-started/installation/).
-Once you have `uv` installed, you can install `jaxNRSur` with`uv add JaxNRSur` in the project you are developing.
-If you want to try this package out, clone this repository and cd into the directory, then run `uv sync --dev` should produce an environment in the directory. The environment should have `.venv/bin/activate` which you can run `source .venv/bin/activate` to activate the environment.
+The recommended way to install `jaxNRSur` is via `uv`. [uv](https://docs.astral.sh/uv/) is a python package and project manager that takes inspiration and is written in `rust`. You can find the installation instructions [here](https://docs.astral.sh/uv/getting-started/installation/).
+Once you have `uv` installed, you can install `JaxNRSur` with`uv add JaxNRSur` in the project you are developing.
 
-Alternatively, you can install `jaxNRSur` with `pip`: clone the repository, then do `pip install .`.
+
+If you want to try this package out, run the follow commands to create and activate a development environment
+```
+git clone https://github.com/kazewong/JaxNRSur
+cd JaxNRSur
+uv sync --dev
+source .venv/bin/activate
+```
+
+Alternatively, you can install `jaxNRSur` with `pip install JaxNRSur`
 
 If you want to use GPU, you will need to run `uv sync --all-extras` or `pip install -U "jax[cuda12]"` to install the version of `jax` which is compatible with an Nvidia GPU.
 
@@ -44,6 +52,20 @@ params = jnp.array([0.9, 0.0, 0.5, 0.0, 0.5, 0.0, 0.3])
 model = NRSur7dq4Model()
 h = model(time, params)
 ```
+
+This interface generate the waveform that does not contains extransic scaling with the total mass and distance. To obtain a dimensionful waveform, we provide a thin wrapper on top of the core API. Say you have constructed a model, you can then get dimensionful waveform with 
+
+```python
+from jaxnrsur import JaxNRSur
+
+model = NRHybSur3dq8Model()
+jaxnrsur = JaxNRSur(model, alpha_window=0.1, segment_length=4.0, sampling_rate=4096)
+params_dimensionful = jnp.array([60.0, 400.0, 0.1, 0.2, 0.9, 0.1, 0.1])
+h = jaxnrsur.get_waveform_td(time, params_dimensionful)
+```
+The dimensionful parameters assume the first four parameters to be `[M_tot, distance, inclination, phase_c]`, followed by the dimensionless parameters.
+
+This higher level API also provides functionality to generate frequency domain waveforms by transforming the time domain waveform into frequency domain. You can find more detail [here](https://github.com/kazewong/JaxNRSur/blob/4d11d10df27fe242ef0859335bad7b854387f502/src/jaxnrsur/__init__.py#L130).
 
 ## Jax features
 
@@ -91,12 +113,11 @@ h_multi = eqx.filter_jit(eqx.filter_vmap(model.get_waveform, in_axes=(None, 0)))
 
 <!-- Add a notebook on google colab to show the benchmark. -->
 
+This is a benchmarking notebook hosted on Google Colab for people who want to try 
+
 <a href="https://colab.research.google.com/drive/1A12tzSPdFBL_jzWYLfll4yB1H2iWRtoi?usp=sharing">
 <img alt="Static Badge" src="https://img.shields.io/badge/Colab-benchmark-orange?style=for-the-badge&logo=googlecolab">
 </a>
-
-
-
 
 ## Local data cache
 
