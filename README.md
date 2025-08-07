@@ -104,7 +104,7 @@ Similar to JIT, we need to use `eqx.filter_vmap` instead of `jax.jit` in our cas
 ```python
 params = jnp.array([[0.9, 0.1, 0.1]])
 params_multi = jnp.repeat(params, 10, axis=0)
-h_multi = eqx.filter_jit(eqx.filter_vmap(model.get_waveform, in_axes=(None, 0)))(
+h_multi = eqx.filter_jit(eqx.filter_vmap(model, in_axes=(None, 0)))(
     time, params_multi
 )
 ```
