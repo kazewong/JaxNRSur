@@ -45,10 +45,10 @@ from jaxnrsur.NRHybSur3dq8 import NRHybSur3dq8Model
 from jaxnrsur.NRSur7dq4 import NRSur7dq4Model
 
 time = jnp.linspace(-1000, 100, 100000)
-params = jnp.array([0.9, 0.1, 0.1])
+params = jnp.array([1.1, 0.1, 0.1])
 model = NRHybSur3dq8Model()
 h = model(time, params)
-params = jnp.array([0.9, 0.0, 0.5, 0.0, 0.5, 0.0, 0.3])
+params = jnp.array([1.1, 0.0, 0.5, 0.0, 0.5, 0.0, 0.3])
 model = NRSur7dq4Model()
 h = model(time, params)
 ```
@@ -60,7 +60,7 @@ from jaxnrsur import JaxNRSur
 
 model = NRHybSur3dq8Model()
 jaxnrsur = JaxNRSur(model, alpha_window=0.1, segment_length=4.0, sampling_rate=4096)
-params_dimensionful = jnp.array([60.0, 400.0, 0.1, 0.2, 0.9, 0.1, 0.1])
+params_dimensionful = jnp.array([60.0, 400.0, 0.1, 0.2, 1.1, 0.1, 0.1])
 h = jaxnrsur.get_waveform_td(time, params_dimensionful)
 ```
 The dimensionful parameters assume the first four parameters to be `[M_tot, distance, inclination, phase_c]`, followed by the dimensionless parameters.
@@ -102,7 +102,7 @@ grad_target_params = jax.grad(target, argnums=1)
 Similar to JIT, we need to use `eqx.filter_vmap` instead of `jax.jit` in our case. Another note is that `vmap` does not compile the code, so one needs to use `eqx.filter_jit` on top of `eqx.filter_vmap` to compile the code.
 
 ```python
-params = jnp.array([[0.9, 0.1, 0.1]])
+params = jnp.array([[1.1, 0.1, 0.1]])
 params_multi = jnp.repeat(params, 10, axis=0)
 h_multi = eqx.filter_jit(eqx.filter_vmap(model, in_axes=(None, 0)))(
     time, params_multi
