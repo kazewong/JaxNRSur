@@ -2,7 +2,7 @@ import jax
 import jax.numpy as jnp
 import equinox as eqx
 import pytest
-from jaxnrsur.Spline import CubicSpline
+from jaxnrsur.Spline import CubicSpline, CubicSplineFactorization
 
 
 @pytest.fixture(scope="module")
@@ -51,3 +51,29 @@ def test_cubic_spline_jit(spline_fixture):
     y_jit = jit_fn(x_test)
     y_ref = spline_fixture(x_test)
     assert jnp.allclose(y_jit, y_ref)
+
+
+def test_reused_factorization_matches_default():
+    x_grid = jnp.linspace(0, 1, 20)
+    x_test = jnp.linspace(0, 1, 50)
+    factorization = CubicSplineFactorization(x_grid)
+    for y_grid in (jnp.sin(x_grid), jnp.exp(x_grid)):
+        expected = CubicSpline(x_grid, y_grid)(x_test)
+        actual = CubicSpline(x_grid, y_grid, factorization)(x_test)
+        assert jnp.allclose(actual, expected, atol=1e-8)
+
+
+def test_reused_factorization_grad_and_vmap():
+    x_grid = jnp.linspace(0, 1, 20)
+    x_test = jnp.linspace(0, 1, 50)
+    factorization = CubicSplineFactorization(x_grid)
+
+    def interpolate(y_grid):
+        return CubicSpline(x_grid, y_grid, factorization)(x_test)
+
+    y_batch = jnp.stack([jnp.sin(x_grid), jnp.exp(x_grid)])
+    values = jax.jit(jax.vmap(interpolate))(y_batch)
+    gradient = jax.grad(lambda y: jnp.sum(interpolate(y)))(y_batch[0])
+    assert values.shape == (2, 50)
+    assert gradient.shape == x_grid.shape
+    assert jnp.all(jnp.isfinite(gradient))

@@ -1,7 +1,88 @@
-import lineax as lx
-import jax.numpy as jnp
+import equinox as eqx
 import jax
+import jax.numpy as jnp
 from jaxtyping import Float, Array
+
+
+class CubicSplineFactorization(eqx.Module):
+    """Reusable factorization for cubic splines on one fixed grid."""
+
+    x_grid: Float[Array, " n_grid"]
+    diff_x: Float[Array, " n_grid-1"]
+    upper_diagonal: Float[Array, " n_grid-1"]
+    lower_factor: Float[Array, " n_grid-1"]
+    diagonal_factor: Float[Array, " n_grid"]
+
+    def __init__(self, x: Float[Array, " n_grid"]) -> None:
+        if x.ndim != 1 or len(x) < 2:
+            raise ValueError(
+                "x must be a one-dimensional grid with at least two points"
+            )
+
+        diff = jnp.diff(x)
+        diagonal = jnp.ones(len(x), dtype=x.dtype).at[1:-1].set(2.0)
+        lower = diff[:-1] / (diff[:-1] + diff[1:])
+        upper = diff[1:] / (diff[:-1] + diff[1:])
+        lower = jnp.concatenate([lower, jnp.ones(1, dtype=x.dtype)])
+        upper = jnp.concatenate([jnp.ones(1, dtype=x.dtype), upper])
+
+        def factor_step(previous_diagonal, values):
+            lower_value, diagonal_value, upper_value = values
+            multiplier = lower_value / previous_diagonal
+            next_diagonal = diagonal_value - multiplier * upper_value
+            return next_diagonal, (multiplier, next_diagonal)
+
+        _, (lower_factor, diagonal_tail) = jax.lax.scan(
+            factor_step,
+            diagonal[0],
+            (lower, diagonal[1:], upper),
+        )
+        self.x_grid = x
+        self.diff_x = diff
+        self.upper_diagonal = upper
+        self.lower_factor = lower_factor
+        self.diagonal_factor = jnp.concatenate([diagonal[:1], diagonal_tail])
+
+    def solve(self, y: Float[Array, " n_grid"]) -> Float[Array, " n_grid"]:
+        """Solve for spline coefficients using the stored LU factors."""
+        if y.ndim != 1 or len(y) != len(self.x_grid):
+            raise ValueError("y must be one-dimensional and match the spline grid")
+
+        d1 = (y[1:-1] - y[:-2]) / self.diff_x[:-1]
+        d2 = (y[2:] - y[1:-1]) / self.diff_x[1:]
+        interior = 6.0 * (d2 - d1) / (self.x_grid[2:] - self.x_grid[:-2])
+        vector = jnp.concatenate(
+            [jnp.zeros(1, dtype=y.dtype), interior, jnp.zeros(1, dtype=y.dtype)]
+        )
+
+        def forward_step(previous_value, values):
+            lower_factor, vector_value = values
+            next_value = vector_value - lower_factor * previous_value
+            return next_value, next_value
+
+        _, forward_tail = jax.lax.scan(
+            forward_step,
+            vector[0],
+            (self.lower_factor, vector[1:]),
+        )
+        forward = jnp.concatenate([vector[:1], forward_tail])
+        last = forward[-1] / self.diagonal_factor[-1]
+
+        def backward_step(next_value, values):
+            upper_value, diagonal_value, forward_value = values
+            value = (forward_value - upper_value * next_value) / diagonal_value
+            return value, value
+
+        _, reversed_head = jax.lax.scan(
+            backward_step,
+            last,
+            (
+                self.upper_diagonal[::-1],
+                self.diagonal_factor[:-1][::-1],
+                forward[:-1][::-1],
+            ),
+        )
+        return jnp.concatenate([reversed_head[::-1], last[None]])
 
 
 class CubicSpline:
@@ -17,19 +98,29 @@ class CubicSpline:
     x_grid: Float[Array, " batch"]  # input x data
     y_grid: Float[Array, " n"]  # input y data
 
-    def __init__(self, x: Float[Array, " n_grid"], y: Float[Array, " n_grid"]) -> None:
+    def __init__(
+        self,
+        x: Float[Array, " n_grid"],
+        y: Float[Array, " n_grid"],
+        factorization: CubicSplineFactorization | None = None,
+    ) -> None:
         """Initializes the CubicSpline object.
 
         Args:
             x (Float[Array, " n_grid"]): 1D array of x data points (must be sorted).
             y (Float[Array, " n_grid"]): 1D array of y data points.
+            factorization (CubicSplineFactorization, optional): Reusable
+                factorization for the same x grid.
         """
         self.x_grid = x
         self.diff_x = jnp.diff(x)
         self.y_grid = y
 
         assert len(x) == len(y), "x and y must have the same length"
-        self.coeff = self.build_rep(x, y)
+        if factorization is None:
+            self.coeff = self.build_rep(x, y)
+        else:
+            self.coeff = factorization.solve(y)
 
     def __call__(self, x: Float[Array, " n_grid"]) -> Float[Array, " n_grid"]:
         """Evaluates the spline at the given x values.
@@ -114,21 +205,4 @@ class CubicSpline:
         Returns:
             Float[Array, " n_grid"]: Coefficients of the cubic spline representation.
         """
-        # Set up the tridiagonal system for spline coefficients
-        diag = jnp.ones(len(x))
-        diag = diag.at[1:-1].set(2.0)
-        diff = jnp.diff(x)
-        lower_diag = diff[:-1] / (diff[:-1] + diff[1:])
-        upper_diag = diff[1:] / (diff[:-1] + diff[1:])
-        lower_diag = jnp.concatenate([lower_diag, jnp.ones(1)])
-        upper_diag = jnp.concatenate([jnp.ones(1), upper_diag])
-        operator = lx.TridiagonalLinearOperator(diag, lower_diag, upper_diag)
-        vector = 6.0 * __class__.divided_difference(
-            x[:-2], x[1:-1], x[2:], y[:-2], y[1:-1], y[2:]
-        )
-        # Natural spline boundary conditions (second derivative = 0 at edges)
-        low_edge = jnp.array([0])
-        high_edge = jnp.array([0])
-        vector = jnp.concatenate([low_edge, vector, high_edge])
-
-        return lx.linear_solve(operator, vector).value
+        return CubicSplineFactorization(x).solve(y)

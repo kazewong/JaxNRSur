@@ -3,7 +3,7 @@ import h5py
 import jax.numpy as jnp
 import jax
 from jaxnrsur.DataLoader import load_data, h5Group_to_dict, h5_mode_tuple
-from jaxnrsur.Spline import CubicSpline
+from jaxnrsur.Spline import CubicSpline, CubicSplineFactorization
 from jaxnrsur.EIMPredictor import EIMpredictor
 from jaxnrsur.Harmonics import SpinWeightedSphericalHarmonics
 from jaxnrsur import WaveformModel
@@ -168,6 +168,7 @@ class NRHybSur3dq8DataLoader(eqx.Module):
 
 class NRHybSur3dq8Model(WaveformModel):
     data: NRHybSur3dq8DataLoader
+    spline_factorization: CubicSplineFactorization
     mode_no22: list[dict]
     harmonics: list[SpinWeightedSphericalHarmonics]
     negative_harmonics: list[SpinWeightedSphericalHarmonics]
@@ -201,6 +202,7 @@ class NRHybSur3dq8Model(WaveformModel):
             modelist (list[tuple[int, int]]): List of modes to be used.
         """
         self.data = NRHybSur3dq8DataLoader(modelist=modelist)  # type: ignore
+        self.spline_factorization = CubicSplineFactorization(self.data.sur_time)
         self.harmonics = []
         self.negative_harmonics = []
         negative_mode_prefactor = []
@@ -334,9 +336,9 @@ class NRHybSur3dq8Model(WaveformModel):
         Returns:
             Float[Array, " n_sample"]: Complex mode data at requested times.
         """
-        return CubicSpline(self.data.sur_time, real)(time) + 1j * CubicSpline(
-            self.data.sur_time, imag
-        )(time)
+        return CubicSpline(self.data.sur_time, real, self.spline_factorization)(
+            time
+        ) + 1j * CubicSpline(self.data.sur_time, imag, self.spline_factorization)(time)
 
     def get_22_mode(
         self,
@@ -359,8 +361,12 @@ class NRHybSur3dq8Model(WaveformModel):
         amp = self.get_eim(self.data.modes[self.mode_22_index]["amp"], params)
         phase = -self.get_eim(self.data.modes[self.mode_22_index]["phase"], params)
         phase = phase + get_T3_phase(q, self.data.sur_time)  # type: ignore
-        amp_interp = CubicSpline(self.data.sur_time, amp)(time)
-        phase_interp = CubicSpline(self.data.sur_time, phase)(time)
+        amp_interp = CubicSpline(self.data.sur_time, amp, self.spline_factorization)(
+            time
+        )
+        phase_interp = CubicSpline(
+            self.data.sur_time, phase, self.spline_factorization
+        )(time)
         return amp_interp * jnp.exp(1j * phase_interp)
 
     def get_waveform_geometric(
